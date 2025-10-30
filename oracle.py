@@ -79,6 +79,18 @@ class PikafishEngine:
                 break
         return fen
 
+    def get_fen_after_fen_and_moves(self, starting_fen, moves):
+        self.send(f"position {starting_fen} moves {moves}")
+        self.send("d")
+        lines = self._wait_for("Fen:")
+        fen = None
+        for line in lines:
+            match = re.search(r"Fen: (.+)", line)
+            if match:
+                fen = match.group(1)
+                break
+        return fen
+
     def get_best_move(self, think_time):
         self.send(f"go movetime {think_time}")
         lines = self._wait_for("bestmove")
@@ -126,12 +138,21 @@ class PikafishEngine:
                     draw_prob = 0.0
                     lose_prob = 1.0
         return centipawns, win_prob, draw_prob, lose_prob
+    
+    def get_legal_moves(self, fen):
+        self.new_game()
+        self.set_position(fen)
+        self.send("go perft 1")
+        lines = self._wait_for("Nodes searched:")
+        legal_moves = []
+        for line in lines:
+            matches = re.findall(r'^[a-i][0-9][a-i][0-9]', line)
+            legal_moves.extend(matches)
+        return legal_moves
 
     def quit(self):
         self.send("quit")
         self.engine.wait()
-
-
 
 def annotate_game(game, engine, think_time):
     boards = list()

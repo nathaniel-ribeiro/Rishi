@@ -128,9 +128,9 @@ if __name__ == "__main__":
         avg_val_loss = val_loss / total
         if device == "cuda": torch.cuda.synchronize()
         tock = time.time()
-        elapsed_mins = (tock - tick) // 60
+        elapsed_mins = (tock - tick) / 60
 
-        print(f"Losses for epoch {epoch}: \t Train: {avg_train_loss:.3f} \t Val: {avg_val_loss:.3f} \t in {elapsed_mins} mins")
+        print(f"Losses for epoch {epoch}: \t Train: {avg_train_loss:.3f} \t Val: {avg_val_loss:.3f} \t in {elapsed_mins:.1f} mins")
         if avg_val_loss < old_val_loss:
             patience = PATIENCE
         else:
