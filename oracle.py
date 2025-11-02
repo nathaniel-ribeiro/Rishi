@@ -80,7 +80,7 @@ class PikafishEngine:
         return fen
 
     def get_fen_after_fen_and_moves(self, starting_fen, moves):
-        self.send(f"position {starting_fen} moves {moves}")
+        self.send(f"position fen {starting_fen} moves {moves}")
         self.send("d")
         lines = self._wait_for("Fen:")
         fen = None
