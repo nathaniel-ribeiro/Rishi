@@ -6,6 +6,7 @@ import os
 from argparse import ArgumentParser
 
 SUMMARY_DIR = os.path.expanduser("~/Rishi/data/puzzle_sweeps")
+file_dir = "~/Rishi/data/puzzles_data_5000.csv"
 
 #For puzzle test sweep using Slurm
 def write_summary_row(thinktime, numThreads, success, alt_success, fail, elapsed):
@@ -26,13 +27,11 @@ def write_summary_row(thinktime, numThreads, success, alt_success, fail, elapsed
     }]).to_csv(out, index=False)
 
 #Test all puzzles
-def Full_Puzzle_Test(save_results = False, thinktime = 50, numThreads = 8):
+def Full_Puzzle_Test(engine, save_results = False, thinktime = 50, numThreads = 8):
     #Read csv
-    file_dir = "~/Rishi/data/puzzles_data_5000.csv"
     df = pd.read_csv(file_dir)
 
     #Start engine
-    engine = PikafishEngine(threads=numThreads)
     Success = 0
     Alternate_Success = 0
     Fail = 0
@@ -86,13 +85,11 @@ def Full_Puzzle_Test(save_results = False, thinktime = 50, numThreads = 8):
     engine.quit()
 
 #Test 1 puzzle using given puzzle id
-def Puzzle_Test(pid, thinktime = 50, numThreads = 8):
+def Puzzle_Test(engine, pid, thinktime = 50, numThreads = 8):
     #Read csv
-    file_dir = "~/Rishi/data/puzzles_data_5000.csv"
     df = pd.read_csv(file_dir)
 
     #Start engine
-    engine = PikafishEngine(threads=numThreads)
     start_time = time.time()
 
     puzzle = df[df["puzzle_id"] == pid].copy()
@@ -151,28 +148,38 @@ def Check_Alternate_Answer(engine,fen,category,thinktime):
             fen = engine.play_moves(fen,[best_move])
     return engine.is_checkmate(thinktime)
 
-#No arg : run all without saving
+#-m : decide which model to use(Pikafish or Rishi) (required)
 #-s : run all and save results in csv
 #-t : for running all tests with given thinktime and threads
 #-p puzzle_id : run just that puzzle printint each move
 def main():
-    parser = ArgumentParser(description="Pikafish puzzle solver")
-    parser.add_argument("-s", "--save", action="store_true", help="solve all puzzles")
-    parser.add_argument("-t", "--test", nargs=2, type=int, metavar=("thinktime", "numThreads"), help="run without saving; requires THINKTIME_MS and THREADS")
-    parser.add_argument("-p", "--puzzle-id", dest="puzzle_id", help="solve a single puzzle_id")
+    parser = ArgumentParser(description="Puzzle Solver")
+    parser.add_argument("-m", "--model", required=True, choices=["Pikafish","Rishi"], help="select model to use: Pikafish or Rishi")
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("-s", "--save", action="store_true", help="solve all puzzles while saving results as csv")
+    group.add_argument("-t", "--test", nargs=2, type=int, metavar=("thinktime", "numThreads"), help="solve all puzzles without saving; requires THINKTIME_MS and THREADS")
+    group.add_argument("-p", "--puzzle-id", dest="puzzle_id", help="solve a single puzzle_id")
     args = parser.parse_args()
+    model = args.model
+
+    if(model=="Pikafish"):
+        threads = args.test[1] if args.test else 8
+        engine = PikafishEngine(threads=threads)
+    elif(model=="Rishi"):
+        pass
 
     if args.puzzle_id:
-        Puzzle_Test(args.puzzle_id)
+        Puzzle_Test(engine, args.puzzle_id)
     elif args.save:
-        Full_Puzzle_Test(True)
+        Full_Puzzle_Test(engine, True)
     elif args.test:
         thinktime, numThreads = args.test  
         if thinktime <= 0 or numThreads <= 0:
             raise ValueError("THINKTIME_MS and THREADS must be positive integers.")
-        Full_Puzzle_Test(False, thinktime, numThreads)
+        Full_Puzzle_Test(engine, False, thinktime)
     else:
-        Full_Puzzle_Test() 
+        Full_Puzzle_Test(engine) 
 
 if __name__ == "__main__":
     main()

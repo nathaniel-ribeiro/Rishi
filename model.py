@@ -30,7 +30,7 @@ class TransformerClassifier(nn.Module):
             nhead=n_heads,
             dim_feedforward=4*d_model,
             dropout=dropout,
-            activation="gelu",
+            activation="relu",
             batch_first=True
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)

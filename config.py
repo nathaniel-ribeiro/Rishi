@@ -8,6 +8,7 @@ NUM_WORKERS = 16
 PATH_TO_PIKAFISH_BINARY = os.path.expanduser("~/Pikafish/src/pikafish")
 # directory where PGN files for training and CSV of board states with annotations should be saved
 DATA_DIR = "./data"
+MODELS_DIR = "./models"
 # time that engine will think before producing the best move. Deepmind used 50 ms
 PIKAFISH_MOVETIME_MS = 50
 # Stockfish/Pikafish recommends num_cores * 2 - 1
