@@ -139,4 +139,4 @@ if __name__ == "__main__":
             break
         old_val_loss = avg_val_loss
 
-    if SAVE_MODEL: torch.save(model.state_dict(), f"{config.MODELS_DIR}/rishi.pt")
+    if SAVE_MODEL: torch.save(model, f"{config.MODELS_DIR}/rishi.pt")
