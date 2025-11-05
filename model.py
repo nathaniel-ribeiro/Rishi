@@ -45,18 +45,25 @@ class TransformerClassifier(nn.Module):
         self.apply(self._init_weights)
     
     def _init_weights(self, module):
-        # re-initialize since TransformerEncoder initializes all layers with the same weights
         if isinstance(module, nn.Linear):
+            # Xavier initialization for linear layers
             nn.init.xavier_uniform_(module.weight)
             if module.bias is not None:
-                nn.init.constant_(module.bias, 0)
-            
-        elif isinstance(module, nn.LayerNorm):
-            nn.init.constant_(module.weight, 1.0)
-            nn.init.constant_(module.bias, 0)
-        
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0, std=math.sqrt(2.0 / (module.embedding_dim + self.vocab_size)))
+            # Normal initialization for embeddings
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.MultiheadAttention):
+            # Xavier uniform for projection matrices
+            nn.init.xavier_uniform_(module.in_proj_weight)
+            if module.in_proj_bias is not None:
+                nn.init.zeros_(module.in_proj_bias)
+            nn.init.xavier_uniform_(module.out_proj.weight)
+            if module.out_proj.bias is not None:
+                nn.init.zeros_(module.out_proj.bias)
     
     def forward(self, x):
         x = self.token_embedding(x)
