@@ -13,14 +13,7 @@ class Rishi:
 
         self.tokenizer = BoardTokenizer(97)
         #TODO: fix this later by serializing the whole model in the training script
-        self.model = TransformerClassifier(self.tokenizer.vocab_size,
-                                           self.tokenizer.expected_seq_len,
-                                           256,
-                                           3,
-                                           4,
-                                           2,
-                                           0.013,)
-        self.model.load_state_dict(torch.load(path_to_model, map_location=self.device))
+        self.model = torch.load(path_to_model, map_location=self.device)
         self.model.to(self.device)
         self.model.eval()
         self.temperature = temperature
@@ -45,6 +38,7 @@ class Rishi:
         return self.pikafish.get_fen_after_fen_and_moves(fen, moves)
     
     def get_best_move(self, fen):
+        #TODO: update this to account for change from WDL probs -> win prob
         legal_moves = self.pikafish.get_legal_moves(fen)
         future_fens = [self.pikafish.get_fen_after_fen_and_moves(fen, legal_move) for legal_move in legal_moves]
         future_fens_tokenized = np.array([self.tokenizer.encode(future_fen) for future_fen in future_fens])
