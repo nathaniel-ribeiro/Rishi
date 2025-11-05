@@ -148,13 +148,13 @@ if __name__ == "__main__":
 
         print(f"Losses for epoch {epoch}: \t Train: {avg_train_loss:.3f} \t Val: {avg_val_loss:.3f} \t in {elapsed_mins:.1f} mins")
         
-        # skip early stopping if we're still warming up
-        if current_step < num_warmup_steps:
-            continue
-
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             best_model = copy.deepcopy(model)
+            
+        # skip early stopping if we're still warming up
+        if current_step < num_warmup_steps:
+            continue
         
         if avg_val_loss < old_val_loss:
             patience = PATIENCE
