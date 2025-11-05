@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
+import math
 
 class SinusoidalPositionalEncoding(nn.Module):
     def __init__(self, d_model, max_seq_len):
@@ -55,7 +56,7 @@ class TransformerClassifier(nn.Module):
             nn.init.constant_(module.bias, 0)
         
         elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0, std=torch.sqrt(2.0 / (module.embedding_dim + self.vocab_size)))
+            nn.init.normal_(module.weight, mean=0, std=math.sqrt(2.0 / (module.embedding_dim + self.vocab_size)))
     
     def forward(self, x):
         x = self.token_embedding(x)
