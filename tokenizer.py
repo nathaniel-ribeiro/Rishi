@@ -10,7 +10,7 @@ class BoardTokenizer:
                       'k', 'a', 'e', 'r', 'c', 'n', 'p',
                       '0', '1', '2', '3', '4', '5', '6',
                       '7', '8', '9', '0', 'w', 'b', '.',
-                      '[MASK]']
+                      '[CLS]']
         self.vocab_size = len(self.vocab)
         self.token_to_idx = dict(zip(self.vocab, range(len(self.vocab))))
 
@@ -28,7 +28,8 @@ class BoardTokenizer:
         capture_clock = m.group(2).zfill(3)
         halfmove_clock = m.group(3).zfill(3)
             
-        tokenized = list(rows) + list(whose_move) + list(capture_clock) + list(halfmove_clock)
+        # prepend sequence with [CLS] token
+        tokenized = ['[CLS]'] + list(rows) + list(whose_move) + list(capture_clock) + list(halfmove_clock)
         tokenized = np.array([self.token_to_idx[token] for token in tokenized])
         assert tokenized.shape[0] == self.expected_seq_len, f"Expected tokenized FEN to be {self.expected_seq_len} chars, got {tokenized.shape[0]}"
         return tokenized

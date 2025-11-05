@@ -69,7 +69,7 @@ class TransformerClassifier(nn.Module):
         x = self.token_embedding(x)
         x = self.pos_encoding(x)
         x = self.encoder(x)
-        x = x.mean(dim=1)
+        x = x[:, 0, :]
         x = self.classifier(x)
         x = F.sigmoid(x)
         return x
