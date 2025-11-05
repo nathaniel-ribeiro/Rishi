@@ -5,23 +5,20 @@ from tokenizer import BoardTokenizer
 from model import TransformerClassifier
 import numpy as np
 import time
-import random
 import argparse
 import copy
-import math
-from transformers import get_cosine_schedule_with_warmup
 import torch.nn.functional as F
 
 def get_args():
     parser = argparse.ArgumentParser(description="Training configuration options")
 
-    parser.add_argument("--max_epochs", type=int, default=200,
+    parser.add_argument("--max_epochs", type=int, default=100,
                         help="Maximum number of epochs to train for")
     parser.add_argument("--batch_size", type=int, default=4096,
                         help="Batch size per iteration")
     parser.add_argument("--patience", type=int, default=10,
                         help="Early stopping patience")
-    parser.add_argument("--learning_rate", type=float, default=3e-4,
+    parser.add_argument("--learning_rate", type=float, default=1e-4,
                         help="Initial learning rate for Adam optimizer")
     parser.add_argument("--board_flip_p", type=float, default=0.5,
                         help="Probability of horizontally flipping the board for data augmentation")
@@ -71,14 +68,6 @@ if __name__ == "__main__":
     VOCAB_SIZE = tokenizer.vocab_size
     model = TransformerClassifier(VOCAB_SIZE, MAX_SEQ_LEN, D_MODEL, N_LAYERS, N_HEADS, DROPOUT).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-
-    num_training_steps = MAX_EPOCHS * math.ceil(len(train_ds) / BATCH_SIZE)
-    num_warmup_steps = 0.1 * num_training_steps
-    scheduler = get_cosine_schedule_with_warmup(
-        optimizer,
-        num_warmup_steps = num_warmup_steps,
-        num_training_steps = num_training_steps
-    )
     train_criterion = torch.nn.BCEWithLogitsLoss()
     val_criterion = torch.nn.MSELoss()
 
@@ -111,7 +100,6 @@ if __name__ == "__main__":
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
-            scheduler.step()
             current_step += 1
 
             train_loss += loss.item() * inputs.size(0)
@@ -146,10 +134,6 @@ if __name__ == "__main__":
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             best_model = copy.deepcopy(model)
-
-        # skip early stopping if we're still warming up
-        if current_step < num_warmup_steps:
-            continue
         
         if avg_val_loss < old_val_loss:
             patience = PATIENCE
