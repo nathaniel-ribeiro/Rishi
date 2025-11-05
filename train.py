@@ -29,8 +29,8 @@ def get_args():
                         help="Number of transformer encoder layers")
     parser.add_argument("--max_seq_len", type=int, default=97,
                         help="Maximum input sequence length")
-    parser.add_argument("--label_smoothing", type=float, default=0.05,
-                        help="Label smoothing factor in [0.0, 1.0]")
+    parser.add_argument("--weight_decay", type=float, default=0.01,
+                        help="Weight decay factor in [0.0, 1.0]")
     parser.add_argument("--dropout", type=float, default=0.1,
                         help="Dropout rate")
     parser.add_argument("--save_model", action="store_true",
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     N_HEADS = args.n_heads
     N_LAYERS = args.n_layers
     MAX_SEQ_LEN = args.max_seq_len
-    LABEL_SMOOTHING = args.label_smoothing
+    WEIGHT_DECAY = args.weight_decay
     DROPOUT = args.dropout
     SAVE_MODEL = args.save_model
 
@@ -73,9 +73,9 @@ if __name__ == "__main__":
     test_loader = torch.utils.data.DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
 
     VOCAB_SIZE = tokenizer.vocab_size
-    model = TransformerClassifier(VOCAB_SIZE, MAX_SEQ_LEN, D_MODEL, 3, N_LAYERS, N_HEADS, DROPOUT).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    criterion = torch.nn.KLDivLoss(reduction="batchmean")
+    model = TransformerClassifier(VOCAB_SIZE, MAX_SEQ_LEN, D_MODEL, 1, N_LAYERS, N_HEADS, DROPOUT).to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    criterion = torch.nn.MSELoss()
 
     parameter_count = sum(p.numel() for p in model.parameters())
     print(f"Model has {parameter_count/1e6:.1f} M params")
@@ -95,11 +95,8 @@ if __name__ == "__main__":
             optimizer.zero_grad()
             with torch.autocast(device_type=device):
                 outputs = model(inputs)
-                # KL Divergence expects probabilities in the log-space
-                log_outputs = torch.log(outputs + 1e-8)
-                # smooth targets to reduce overconfidence in totally winning or dead lost positions
-                smoothed_labels = (1 - LABEL_SMOOTHING) * labels + LABEL_SMOOTHING / labels.size(-1)
-                loss = criterion(log_outputs, smoothed_labels)
+                # RMSE
+                loss = torch.sqrt(criterion(outputs, labels))
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -118,10 +115,8 @@ if __name__ == "__main__":
                 for inputs, labels in val_loader:
                     inputs, labels = inputs.to(device), labels.to(device)
                     outputs = model(inputs)
-                    # KL Divergence expects probabilities in the log-space
-                    log_outputs = torch.log(outputs + 1e-8)
-                    loss = criterion(log_outputs, labels)
-
+                    # RMSE
+                    loss = torch.sqrt(criterion(outputs, labels))
                     val_loss += loss.item() * inputs.size(0)
                     total += inputs.size(0)
 

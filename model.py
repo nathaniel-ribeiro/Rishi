@@ -20,7 +20,7 @@ class SinusoidalPositionalEncoding(nn.Module):
         return x
 
 class TransformerClassifier(nn.Module):
-    def __init__(self, vocab_size, max_seq_len, d_model=256, n_classes=3, n_layers=8, n_heads=8, dropout=0.1):
+    def __init__(self, vocab_size, max_seq_len, d_model=256, n_classes=1, n_layers=8, n_heads=8, dropout=0.1):
         super(TransformerClassifier, self).__init__()
         self.token_embedding = nn.Embedding(vocab_size, d_model)
         self.pos_encoding = SinusoidalPositionalEncoding(d_model, max_seq_len)
