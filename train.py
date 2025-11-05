@@ -32,7 +32,7 @@ def get_args():
                         help="Maximum input sequence length")
     parser.add_argument("--weight_decay", type=float, default=0.01,
                         help="Weight decay factor in [0.0, 1.0]")
-    parser.add_argument("--dropout", type=float, default=0.2,
+    parser.add_argument("--dropout", type=float, default=0.1,
                         help="Dropout rate")
     parser.add_argument("--save_model", action="store_true",
                         help="If specified, save the trained model at the end of training")
