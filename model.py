@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import torch.nn.functional as F
 
 class SinusoidalPositionalEncoding(nn.Module):
     def __init__(self, d_model, max_seq_len):
@@ -20,7 +21,7 @@ class SinusoidalPositionalEncoding(nn.Module):
         return x
 
 class TransformerClassifier(nn.Module):
-    def __init__(self, vocab_size, max_seq_len, d_model=256, n_classes=1, n_layers=8, n_heads=8, dropout=0.1):
+    def __init__(self, vocab_size, max_seq_len, d_model=256, n_layers=8, n_heads=8, dropout=0.1):
         super(TransformerClassifier, self).__init__()
         self.token_embedding = nn.Embedding(vocab_size, d_model)
         self.pos_encoding = SinusoidalPositionalEncoding(d_model, max_seq_len)
@@ -36,7 +37,7 @@ class TransformerClassifier(nn.Module):
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
         self.classifier = nn.Sequential(
             nn.LayerNorm(d_model),
-            nn.Linear(d_model, n_classes)
+            nn.Linear(d_model, 1)
         )
     
     def forward(self, x):
@@ -44,6 +45,6 @@ class TransformerClassifier(nn.Module):
         x = self.pos_encoding(x)
         x = self.encoder(x)
         x = x.mean(dim=1)
-        logits = self.classifier(x)
-        probs = torch.softmax(logits, dim=-1)
-        return probs
+        x = self.classifier(x)
+        x = F.sigmoid(x)
+        return x

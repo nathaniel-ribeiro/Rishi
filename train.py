@@ -73,7 +73,7 @@ if __name__ == "__main__":
     test_loader = torch.utils.data.DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
 
     VOCAB_SIZE = tokenizer.vocab_size
-    model = TransformerClassifier(VOCAB_SIZE, MAX_SEQ_LEN, D_MODEL, 1, N_LAYERS, N_HEADS, DROPOUT).to(device)
+    model = TransformerClassifier(VOCAB_SIZE, MAX_SEQ_LEN, D_MODEL, N_LAYERS, N_HEADS, DROPOUT).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     criterion = torch.nn.MSELoss()
 
@@ -95,6 +95,8 @@ if __name__ == "__main__":
             optimizer.zero_grad()
             with torch.autocast(device_type=device):
                 outputs = model(inputs)
+                # required to prevent PyTorch from shitting itself when encountering a double under AMP
+                labels = labels.float()
                 # RMSE
                 loss = torch.sqrt(criterion(outputs, labels))
             scaler.scale(loss).backward()
@@ -115,6 +117,8 @@ if __name__ == "__main__":
                 for inputs, labels in val_loader:
                     inputs, labels = inputs.to(device), labels.to(device)
                     outputs = model(inputs)
+                    # required to prevent PyTorch from shitting itself when encountering a double under AMP
+                    labels = labels.float()
                     # RMSE
                     loss = torch.sqrt(criterion(outputs, labels))
                     val_loss += loss.item() * inputs.size(0)
