@@ -5,17 +5,18 @@ from tokenizer import BoardTokenizer
 from model import TransformerClassifier
 import numpy as np
 import time
-import random
 import argparse
+import copy
+import torch.nn.functional as F
 
 def get_args():
     parser = argparse.ArgumentParser(description="Training configuration options")
 
     parser.add_argument("--max_epochs", type=int, default=100,
                         help="Maximum number of epochs to train for")
-    parser.add_argument("--batch_size", type=int, default=2048,
+    parser.add_argument("--batch_size", type=int, default=4096,
                         help="Batch size per iteration")
-    parser.add_argument("--patience", type=int, default=3,
+    parser.add_argument("--patience", type=int, default=10,
                         help="Early stopping patience")
     parser.add_argument("--learning_rate", type=float, default=1e-4,
                         help="Initial learning rate for Adam optimizer")
@@ -23,11 +24,11 @@ def get_args():
                         help="Probability of horizontally flipping the board for data augmentation")
     parser.add_argument("--d_model", type=int, default=256,
                         help="Transformer embedding dimension")
-    parser.add_argument("--n_heads", type=int, default=4,
+    parser.add_argument("--n_heads", type=int, default=8,
                         help="Number of attention heads per transformer layer")
-    parser.add_argument("--n_layers", type=int, default=4,
+    parser.add_argument("--n_layers", type=int, default=8,
                         help="Number of transformer encoder layers")
-    parser.add_argument("--max_seq_len", type=int, default=97,
+    parser.add_argument("--max_seq_len", type=int, default=98,
                         help="Maximum input sequence length")
     parser.add_argument("--weight_decay", type=float, default=0.01,
                         help="Weight decay factor in [0.0, 1.0]")
@@ -54,14 +55,6 @@ if __name__ == "__main__":
     SAVE_MODEL = args.save_model
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    torch.manual_seed(42)
-    if device == "cuda": 
-        torch.cuda.manual_seed(42)
-        torch.cuda.manual_seed_all(42)
-    random.seed(42)
-    np.random.seed(42)
-    torch.backends.cudnn.deterministic = True
-
     tokenizer = BoardTokenizer(MAX_SEQ_LEN)
 
     train_ds = AnnotatedBoardsDataset(f'{config.DATA_DIR}/train.csv', tokenizer, BOARD_FLIP_P)
@@ -75,13 +68,18 @@ if __name__ == "__main__":
     VOCAB_SIZE = tokenizer.vocab_size
     model = TransformerClassifier(VOCAB_SIZE, MAX_SEQ_LEN, D_MODEL, N_LAYERS, N_HEADS, DROPOUT).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-    criterion = torch.nn.MSELoss()
+    train_criterion = torch.nn.BCEWithLogitsLoss()
+    val_criterion = torch.nn.MSELoss()
 
     parameter_count = sum(p.numel() for p in model.parameters())
     print(f"Model has {parameter_count/1e6:.1f} M params")
     old_val_loss = np.inf
     patience = PATIENCE
     scaler = torch.amp.GradScaler(device)
+    best_val_loss = np.inf
+    best_model = None
+    current_step = 0
+
     for epoch in range(MAX_EPOCHS):
         model.train()
         train_loss = 0.0
@@ -94,14 +92,15 @@ if __name__ == "__main__":
 
             optimizer.zero_grad()
             with torch.autocast(device_type=device):
-                outputs = model(inputs)
+                logits = model(inputs)
                 # required to prevent PyTorch from shitting itself when encountering a double under AMP
                 labels = labels.float()
-                # RMSE
-                loss = torch.sqrt(criterion(outputs, labels))
+                # BCEWithLogits needs logits
+                loss = train_criterion(logits, labels)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
+            current_step += 1
 
             train_loss += loss.item() * inputs.size(0)
             total += inputs.size(0)
@@ -116,11 +115,12 @@ if __name__ == "__main__":
             with torch.autocast(device_type=device):
                 for inputs, labels in val_loader:
                     inputs, labels = inputs.to(device), labels.to(device)
-                    outputs = model(inputs)
+                    logits = model(inputs)
+                    outputs = F.sigmoid(logits)
                     # required to prevent PyTorch from shitting itself when encountering a double under AMP
                     labels = labels.float()
                     # RMSE
-                    loss = torch.sqrt(criterion(outputs, labels))
+                    loss = torch.sqrt(val_criterion(outputs, labels))
                     val_loss += loss.item() * inputs.size(0)
                     total += inputs.size(0)
 
@@ -129,7 +129,12 @@ if __name__ == "__main__":
         tock = time.time()
         elapsed_mins = (tock - tick) / 60
 
-        print(f"Losses for epoch {epoch}: \t Train: {avg_train_loss:.3f} \t Val: {avg_val_loss:.3f} \t in {elapsed_mins:.1f} mins")
+        print(f"Epoch {epoch}: \t Train Loss (BCE): {avg_train_loss:.3f} \t Val Loss (RMSE): {avg_val_loss:.3f} \t in {elapsed_mins:.1f} mins")
+        
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            best_model = copy.deepcopy(model)
+        
         if avg_val_loss < old_val_loss:
             patience = PATIENCE
         else:
@@ -138,4 +143,4 @@ if __name__ == "__main__":
             break
         old_val_loss = avg_val_loss
 
-    if SAVE_MODEL: torch.save(model, f"{config.MODELS_DIR}/rishi.pt")
+    if SAVE_MODEL: torch.save(best_model, f"{config.MODELS_DIR}/rishi.pt")

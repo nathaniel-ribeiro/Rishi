@@ -22,19 +22,21 @@ class SinusoidalPositionalEncoding(nn.Module):
         return x
 
 class TransformerClassifier(nn.Module):
-    def __init__(self, vocab_size, max_seq_len, d_model=256, n_layers=8, n_heads=8, dropout=0.1):
+    def __init__(self, vocab_size, max_seq_len, d_model, n_layers, n_heads, dropout):
         super(TransformerClassifier, self).__init__()
         self.vocab_size = vocab_size
         self.token_embedding = nn.Embedding(self.vocab_size, d_model)
         self.pos_encoding = SinusoidalPositionalEncoding(d_model, max_seq_len)
 
+        # pre-norm for training stability
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
             nhead=n_heads,
             dim_feedforward=4*d_model,
             dropout=dropout,
             activation="relu",
-            batch_first=True
+            batch_first=True,
+            norm_first=True
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
         self.classifier = nn.Sequential(
@@ -68,8 +70,10 @@ class TransformerClassifier(nn.Module):
     def forward(self, x):
         x = self.token_embedding(x)
         x = self.pos_encoding(x)
-        x = self.encoder(x)
-        x = x.mean(dim=1)
-        x = self.classifier(x)
-        x = F.sigmoid(x)
-        return x
+        x = self.encoder(x, is_causal=False)
+        # assumes [CLS] token is the first token in the sequence
+        x = x[:, 0, :]
+        # Note: we return logits here so we can use BCEWithLogitLoss (safe under AMP)
+        logits = self.classifier(x)
+        probs = F.sigmoid(logits)
+        return logits
