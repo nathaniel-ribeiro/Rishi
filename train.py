@@ -78,7 +78,8 @@ if __name__ == "__main__":
         num_warmup_steps = num_warmup_steps,
         num_training_steps = num_training_steps
     )
-    criterion = torch.nn.MSELoss()
+    train_criterion = torch.nn.BCELoss()
+    val_criterion = torch.nn.MSELoss()
 
     parameter_count = sum(p.numel() for p in model.parameters())
     print(f"Model has {parameter_count/1e6:.1f} M params")
@@ -104,8 +105,7 @@ if __name__ == "__main__":
                 outputs = model(inputs)
                 # required to prevent PyTorch from shitting itself when encountering a double under AMP
                 labels = labels.float()
-                # RMSE
-                loss = torch.sqrt(criterion(outputs, labels))
+                loss = train_criterion(outputs, labels)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -129,7 +129,7 @@ if __name__ == "__main__":
                     # required to prevent PyTorch from shitting itself when encountering a double under AMP
                     labels = labels.float()
                     # RMSE
-                    loss = torch.sqrt(criterion(outputs, labels))
+                    loss = torch.sqrt(val_criterion(outputs, labels))
                     val_loss += loss.item() * inputs.size(0)
                     total += inputs.size(0)
 
@@ -138,7 +138,7 @@ if __name__ == "__main__":
         tock = time.time()
         elapsed_mins = (tock - tick) / 60
 
-        print(f"Losses for epoch {epoch}: \t Train: {avg_train_loss:.3f} \t Val: {avg_val_loss:.3f} \t in {elapsed_mins:.1f} mins")
+        print(f"Epoch {epoch}: \t Train Loss (BCE): {avg_train_loss:.3f} \t Val Loss (RMSE): {avg_val_loss:.3f} \t in {elapsed_mins:.1f} mins")
         
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
