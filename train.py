@@ -30,7 +30,7 @@ def get_args():
                         help="Number of attention heads per transformer layer")
     parser.add_argument("--n_layers", type=int, default=8,
                         help="Number of transformer encoder layers")
-    parser.add_argument("--max_seq_len", type=int, default=97,
+    parser.add_argument("--max_seq_len", type=int, default=98,
                         help="Maximum input sequence length")
     parser.add_argument("--weight_decay", type=float, default=0.01,
                         help="Weight decay factor in [0.0, 1.0]")
