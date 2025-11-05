@@ -57,14 +57,6 @@ if __name__ == "__main__":
     SAVE_MODEL = args.save_model
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    torch.manual_seed(42)
-    if device == "cuda": 
-        torch.cuda.manual_seed(42)
-        torch.cuda.manual_seed_all(42)
-    random.seed(42)
-    np.random.seed(42)
-    torch.backends.cudnn.deterministic = True
-
     tokenizer = BoardTokenizer(MAX_SEQ_LEN)
 
     train_ds = AnnotatedBoardsDataset(f'{config.DATA_DIR}/train.csv', tokenizer, BOARD_FLIP_P)
@@ -151,7 +143,7 @@ if __name__ == "__main__":
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             best_model = copy.deepcopy(model)
-            
+
         # skip early stopping if we're still warming up
         if current_step < num_warmup_steps:
             continue
