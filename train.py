@@ -10,15 +10,16 @@ import argparse
 import copy
 import math
 from transformers import get_cosine_schedule_with_warmup
+import torch.nn.functional as F
 
 def get_args():
     parser = argparse.ArgumentParser(description="Training configuration options")
 
-    parser.add_argument("--max_epochs", type=int, default=100,
+    parser.add_argument("--max_epochs", type=int, default=200,
                         help="Maximum number of epochs to train for")
     parser.add_argument("--batch_size", type=int, default=4096,
                         help="Batch size per iteration")
-    parser.add_argument("--patience", type=int, default=5,
+    parser.add_argument("--patience", type=int, default=10,
                         help="Early stopping patience")
     parser.add_argument("--learning_rate", type=float, default=3e-4,
                         help="Initial learning rate for Adam optimizer")
@@ -78,7 +79,8 @@ if __name__ == "__main__":
         num_warmup_steps = num_warmup_steps,
         num_training_steps = num_training_steps
     )
-    criterion = torch.nn.MSELoss()
+    train_criterion = torch.nn.BCEWithLogitsLoss()
+    val_criterion = torch.nn.MSELoss()
 
     parameter_count = sum(p.numel() for p in model.parameters())
     print(f"Model has {parameter_count/1e6:.1f} M params")
@@ -101,11 +103,11 @@ if __name__ == "__main__":
 
             optimizer.zero_grad()
             with torch.autocast(device_type=device):
-                outputs = model(inputs)
+                logits = model(inputs)
                 # required to prevent PyTorch from shitting itself when encountering a double under AMP
                 labels = labels.float()
-                # RMSE
-                loss = torch.sqrt(criterion(outputs, labels))
+                # BCEWithLogits needs logits
+                loss = train_criterion(logits, labels)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -125,11 +127,12 @@ if __name__ == "__main__":
             with torch.autocast(device_type=device):
                 for inputs, labels in val_loader:
                     inputs, labels = inputs.to(device), labels.to(device)
-                    outputs = model(inputs)
+                    logits = model(inputs)
+                    outputs = F.sigmoid(logits)
                     # required to prevent PyTorch from shitting itself when encountering a double under AMP
                     labels = labels.float()
                     # RMSE
-                    loss = torch.sqrt(criterion(outputs, labels))
+                    loss = torch.sqrt(val_criterion(outputs, labels))
                     val_loss += loss.item() * inputs.size(0)
                     total += inputs.size(0)
 

@@ -70,6 +70,7 @@ class TransformerClassifier(nn.Module):
         x = self.pos_encoding(x)
         x = self.encoder(x)
         x = x[:, 0, :]
-        x = self.classifier(x)
-        x = F.sigmoid(x)
-        return x
+        # Note: we return logits here so we can use BCEWithLogitLoss (safe under AMP)
+        logits = self.classifier(x)
+        probs = F.sigmoid(logits)
+        return logits
