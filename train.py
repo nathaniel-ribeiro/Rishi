@@ -16,7 +16,7 @@ def get_args():
 
     parser.add_argument("--max_epochs", type=int, default=100,
                         help="Maximum number of epochs to train for")
-    parser.add_argument("--batch_size", type=int, default=2048,
+    parser.add_argument("--batch_size", type=int, default=4096,
                         help="Batch size per iteration")
     parser.add_argument("--patience", type=int, default=5,
                         help="Early stopping patience")
