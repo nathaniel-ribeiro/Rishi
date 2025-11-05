@@ -78,8 +78,7 @@ if __name__ == "__main__":
         num_warmup_steps = num_warmup_steps,
         num_training_steps = num_training_steps
     )
-    train_criterion = torch.nn.BCELoss()
-    val_criterion = torch.nn.MSELoss()
+    criterion = torch.nn.MSELoss()
 
     parameter_count = sum(p.numel() for p in model.parameters())
     print(f"Model has {parameter_count/1e6:.1f} M params")
@@ -105,7 +104,8 @@ if __name__ == "__main__":
                 outputs = model(inputs)
                 # required to prevent PyTorch from shitting itself when encountering a double under AMP
                 labels = labels.float()
-                loss = train_criterion(outputs, labels)
+                # RMSE
+                loss = torch.sqrt(criterion(outputs, labels))
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -129,7 +129,7 @@ if __name__ == "__main__":
                     # required to prevent PyTorch from shitting itself when encountering a double under AMP
                     labels = labels.float()
                     # RMSE
-                    loss = torch.sqrt(val_criterion(outputs, labels))
+                    loss = torch.sqrt(criterion(outputs, labels))
                     val_loss += loss.item() * inputs.size(0)
                     total += inputs.size(0)
 
