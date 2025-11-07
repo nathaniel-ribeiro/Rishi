@@ -84,7 +84,7 @@ if __name__ == "__main__":
     if WANDB: wandb.watch(model)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     bce = torch.nn.BCEWithLogitsLoss()
-    rmse = torch.nn.MSELoss()
+    mse = torch.nn.MSELoss()
 
     parameter_count = sum(p.numel() for p in model.parameters())
     print(f"Model has {parameter_count/1e6:.1f} M params")
@@ -134,7 +134,7 @@ if __name__ == "__main__":
                     labels = labels.float()
                     # RMSE
                     loss = bce(logits, labels)
-                    rmse = torch.sqrt(rmse(outputs, labels))
+                    rmse = torch.sqrt(mse(outputs, labels))
                     val_loss += loss.item() * inputs.size(0)
                     val_rmse += rmse.item() * inputs.size(0)
                     total += inputs.size(0)
