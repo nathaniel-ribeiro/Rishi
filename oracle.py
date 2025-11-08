@@ -128,6 +128,75 @@ class PikafishEngine:
                 return line.split()[1]
         return None
 
+    def get_all_legal_moves(self):
+        self.send("go perft 1")
+        lines = self._wait_for("Nodes")
+        legal_moves = []
+        for line in lines:
+            if line.startswith("info") or line.startswith("Nodes") or len(line)==0:
+                continue
+            parts = line.split(":")
+            
+            move = parts[0].strip()
+            legal_moves.append(move)
+
+        return legal_moves
+
+    #For now, it requires a fen. For start position, input a fen of the startpos
+    def get_all_legal_move_successors(self, fen, think_time = 50):
+        self.new_game()
+        self.set_position(fen)
+        legal_moves = self.get_all_legal_moves()
+
+        top_moves = []
+        
+        for move in legal_moves:
+            self.send(f"position fen {fen}")
+            self.send(f"go movetime {think_time} searchmoves {move}")
+            lines = self._wait_for("bestmove")
+            maxdepth = 0
+            final_score = None
+            numeric_eval = None #for sorting purposes
+
+            for line in lines:
+                if not (line.startswith("info") and "pv" in line):
+                    continue
+                if "upperbound" in line or "lowerbound" in line:
+                    continue
+
+                currdepth = int(re.search(r"\bdepth (\d+)", line).group(1))
+                if(currdepth < maxdepth):
+                    continue
+                maxdepth = currdepth
+
+                #fetch evaluation
+                match_score = re.search(r"score (cp|mate) (-?\d+)", line)
+                if match_score:
+                    kind, val = match_score.groups()
+                    final_score = f"{kind} {val}"
+                    if kind == "mate":
+                        m = int(val)
+                        if m > 0:
+                            numeric_eval = 1_000_000 - m
+                        else:
+                            numeric_eval = -1_000_000 - m
+                    else:
+                        numeric_eval = int(val)
+            
+            new_fen = self.play_moves(fen,[move])
+
+            top_moves.append({
+                "move" : move,
+                "score" : final_score,
+                "numeric_eval" : numeric_eval,
+                "fen" : new_fen
+            })
+
+        top_moves.sort(key=lambda x: (x["numeric_eval"] if x["numeric_eval"] is not None else -999999), reverse=True)
+
+        return top_moves
+
+
     def evaluate(self, move_history, think_time):
         '''
         @param move_history: list of moves in long algebraic notation to setup position
