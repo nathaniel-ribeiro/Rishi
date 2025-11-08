@@ -30,6 +30,9 @@ class Rishi:
 
     def setup_game(self, move_history):
         self.pikafish.setup_game(move_history)
+
+    def play_moves(self,fen,moves):
+        self.pikafish.play_moves(fen,moves)
     
     def get_fen_after_moves(self, moves):
         return self.pikafish.get_fen_after_moves(moves)
