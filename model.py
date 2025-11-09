@@ -21,12 +21,23 @@ class SinusoidalPositionalEncoding(nn.Module):
         x = x + self.pe[:, :seq_len, :]
         return x
 
+class LearnedPositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_seq_len):
+        super(LearnedPositionalEncoding, self).__init__()
+        self.pos_embedding = nn.Embedding(max_seq_len, d_model)
+
+    def forward(self, x):
+        seq_len = x.size(1)
+        positions = torch.arange(seq_len, device=x.device).unsqueeze(0)
+        pos_emb = self.pos_embedding(positions)
+        return x + pos_emb
+
 class TransformerClassifier(nn.Module):
     def __init__(self, vocab_size, max_seq_len, d_model, n_layers, n_heads, dropout):
         super(TransformerClassifier, self).__init__()
         self.vocab_size = vocab_size
         self.token_embedding = nn.Embedding(self.vocab_size, d_model)
-        self.pos_encoding = SinusoidalPositionalEncoding(d_model, max_seq_len)
+        self.pos_encoding = LearnedPositionalEncoding(d_model, max_seq_len)
 
         # pre-norm for training stability
         encoder_layer = nn.TransformerEncoderLayer(
@@ -34,9 +45,7 @@ class TransformerClassifier(nn.Module):
             nhead=n_heads,
             dim_feedforward=4*d_model,
             dropout=dropout,
-            activation="relu",
-            batch_first=True,
-            norm_first=True
+            batch_first=True
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
         self.classifier = nn.Sequential(

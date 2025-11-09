@@ -13,11 +13,11 @@ import wandb
 def get_args():
     parser = argparse.ArgumentParser(description="Training configuration options")
 
-    parser.add_argument("--max_epochs", type=int, default=100,
+    parser.add_argument("--max_epochs", type=int, default=50,
                         help="Maximum number of epochs to train for")
     parser.add_argument("--batch_size", type=int, default=4096,
                         help="Batch size per iteration")
-    parser.add_argument("--patience", type=int, default=10,
+    parser.add_argument("--patience", type=int, default=5,
                         help="Early stopping patience")
     parser.add_argument("--learning_rate", type=float, default=1e-4,
                         help="Initial learning rate for Adam optimizer")
@@ -141,12 +141,11 @@ if __name__ == "__main__":
 
         avg_val_loss = val_loss / total
         avg_val_rmse = val_rmse / total
-        if WANDB: run.log({"train_loss_bce": avg_train_loss, 'val_loss_bce': avg_val_loss, 'val_rmse': avg_val_rmse, 'epoch': epoch})
-        print(f"Epoch {epoch}: \t Train Loss (BCE): {avg_train_loss:.3f} \t Val Loss (BCE): {avg_val_loss:.3f} \t Val Loss (RMSE): {avg_val_loss:.3f}")
+        if WANDB: run.log({"train_bce": avg_train_loss, 'val_bce': avg_val_loss, 'val_rmse': avg_val_rmse})
         
         # track best RMSE to save best version of model
-        if avg_val_rmse < best_val_loss:
-            best_val_loss = avg_val_rmse
+        if avg_val_rmse < best_val_rmse:
+            best_val_rmse = avg_val_rmse
             best_model = copy.deepcopy(model)
         
         # patience uses BCE to determine early stopping
@@ -158,6 +157,5 @@ if __name__ == "__main__":
             break
         old_val_loss = avg_val_loss
 
-    print(f"\nBest val loss: {best_val_loss:.3f}")
     if SAVE_MODEL: torch.save(best_model, f"{config.MODELS_DIR}/rishi.pt")
     if WANDB: run.finish()
