@@ -32,7 +32,10 @@ class Rishi:
         self.pikafish.setup_game(move_history)
 
     def play_moves(self,fen,moves):
-        self.pikafish.play_moves(fen,moves)
+        return self.pikafish.play_moves(fen,moves)
+
+    def is_checkmate(self,fen):
+        return self.pikafish.is_checkmate(fen)
     
     def get_fen_after_moves(self, moves):
         return self.pikafish.get_fen_after_moves(moves)

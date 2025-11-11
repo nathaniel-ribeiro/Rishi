@@ -1,5 +1,6 @@
 import pandas as pd
 from oracle import PikafishEngine
+from rishi import Rishi
 import config
 import time
 import os
@@ -117,11 +118,9 @@ def Puzzle_Test(engine, pid, thinktime = 50, numThreads = 8):
 
 #Solve a single puzzle with the fen and solution as parameters
 def Solve_Puzzle(engine,fen,solution,category, thinktime, single_test = False):
-    engine.new_game()
-    engine.set_position(fen)
     puzzle_solved = True
     for i in range(0,len(solution),2):
-        best_move = engine.get_best_move(thinktime)
+        best_move = engine.get_best_move(fen)
         
         #For Debugging Issues
         if(single_test):
@@ -131,22 +130,20 @@ def Solve_Puzzle(engine,fen,solution,category, thinktime, single_test = False):
         if best_move != solution[i]:
             puzzle_solved = False
             break
-        engine.play_moves(fen,tuple(solution[:i+2]))
+        fen = engine.play_moves(fen,tuple(solution[:i+2]))
      
     return puzzle_solved
 
 #Check if Pikafish's answer is still Mate in N
 def Check_Alternate_Answer(engine,fen,category,thinktime):
-    engine.new_game()
-    engine.set_position(fen)
     for i in range(category):
-        best_move = engine.get_best_move(thinktime)
+        best_move = engine.get_best_move(fen)
         fen = engine.play_moves(fen,[best_move])
         #Opponent's optimal move
         if i!=category-1:
-            best_move = engine.get_best_move(thinktime)
+            best_move = engine.get_best_move(fen)
             fen = engine.play_moves(fen,[best_move])
-    return engine.is_checkmate(thinktime)
+    return engine.is_checkmate(fen)
 
 #-m : decide which model to use(Pikafish or Rishi) (required)
 #-s : run all and save results in csv
@@ -167,7 +164,7 @@ def main():
         threads = args.test[1] if args.test else 8
         engine = PikafishEngine(threads=threads)
     elif(model=="Rishi"):
-        pass
+        engine = Rishi("models/rishi.pt")
 
     if args.puzzle_id:
         Puzzle_Test(engine, args.puzzle_id)

@@ -54,11 +54,6 @@ class PikafishEngine:
             if token in line:
                 break
         return lines
-    
-    def new_game(self):
-        self.send("ucinewgame")
-        self.send("isready")
-        _ = self._wait_for("readyok")
 
     def set_position(self, fen):
         self.send(f"position fen {fen}")
@@ -87,7 +82,9 @@ class PikafishEngine:
                 break
         return fen
 
-    def is_checkmate(self, think_time):
+    def is_checkmate(self, fen, think_time=50):
+        self.new_game()
+        self.set_position(fen)
         self.send(f"go movetime {think_time}")
         lines = self._wait_for("bestmove")
         for line in lines:
@@ -120,7 +117,9 @@ class PikafishEngine:
                 break
         return fen
 
-    def get_best_move(self, think_time):
+    def get_best_move(self, fen, think_time=50):
+        self.new_game()
+        self.set_position(fen)
         self.send(f"go movetime {think_time}")
         lines = self._wait_for("bestmove")
         for line in lines:
