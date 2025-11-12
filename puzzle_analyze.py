@@ -123,9 +123,10 @@ def Solve_Puzzle(engine,fen,solution,category, thinktime, single_test = False):
         best_move = engine.get_best_move(fen)
         
         #For Debugging Issues
+        label = getattr(engine, "_name", engine.__class__.__name__)
         if(single_test):
             print("Solution : " + solution[i])
-            print("Pikafish Best Move : " + best_move)
+            print(f"{label} Best Move : " + best_move)
             print()
         if best_move != solution[i]:
             puzzle_solved = False
@@ -164,7 +165,10 @@ def main():
         threads = args.test[1] if args.test else 8
         engine = PikafishEngine(threads=threads)
     elif(model=="Rishi"):
-        engine = Rishi("models/rishi.pt")
+        # engine = Rishi("models/rishi.pt")
+        engine = Rishi("__DUMMY__")
+
+    engine._name = model
 
     if args.puzzle_id:
         Puzzle_Test(engine, args.puzzle_id)

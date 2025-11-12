@@ -37,9 +37,12 @@ class Rishi:
         self.pikafish = PikafishEngine(config.PIKAFISH_THREADS)
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        self.tokenizer = BoardTokenizer(97)
+        self.tokenizer = BoardTokenizer(98)
         #TODO: fix this later by serializing the whole model in the training script
-        self.model = torch.load(path_to_model, map_location=self.device)
+        if path_to_model == "__DUMMY__":
+            self.model = DummyModel("logit")
+        else:
+            self.model = torch.load(path_to_model, map_location=self.device)
         self.model.to(self.device)
         self.model.eval()
         self.temperature = temperature
@@ -69,6 +72,10 @@ class Rishi:
     def get_fen_after_fen_and_moves(self, fen, moves):
         return self.pikafish.get_fen_after_fen_and_moves(fen, moves)
     
+    def quit(self):
+        self.pikafish.send("quit")
+        self.pikafish.engine.wait()
+
     def get_best_move(self, fen):
         #TODO: update this to account for change from WDL probs -> win prob
         legal_moves = self.pikafish.get_legal_moves(fen)
@@ -79,9 +86,10 @@ class Rishi:
         future_fens_tokenized = future_fens_tokenized.to(self.device)
 
         # pass through model and get expected score from WDL probs
-        logits = self.model(future_fens_tokenized)
-        side_win_probs = torch.sigmoid(logits)
-        w_probs = (1.0 - side_win_probs).detach().cpu().numpy()
+        with torch.no_grad():
+            logits = self.model(future_fens_tokenized).squeeze(-1)
+            side_win_probs = torch.sigmoid(logits)
+            w_probs = (1.0 - side_win_probs).detach().cpu().numpy()
 
         # pprint(dict(zip(legal_moves, expected_scores.tolist())))
         
@@ -95,30 +103,27 @@ class Rishi:
         e_x = np.exp(cooled_scores - np.max(cooled_scores))
         move_probabilities = e_x / e_x.sum()
 
-        # --- top p sampling (keep it strictly 1-D and safe) ---
+        # --- top p sampling  ---
         order = np.argsort(move_probabilities)[::-1]
         probs_sorted = move_probabilities[order]
         cumsum = np.cumsum(probs_sorted)
         cutoff = int(np.searchsorted(cumsum, self.top_p) + 1)
         cutoff = max(cutoff, 1)  # ensure at least one kept
 
-        keep_indices = order[:cutoff]                     # shape (K,)
-        top_p_probs = probs_sorted[:cutoff]               # shape (K,)
+        keep_indices = order[:cutoff]
+        top_p_probs = probs_sorted[:cutoff]
         den = top_p_probs.sum()
 
-        # Fallbacks for degenerate cases
-        if cutoff == 1 or not np.isfinite(den) or den <= 0:
-            selected_move_index = int(keep_indices[0])
+        # unified safe normalization
+        normalized_top_p_probs = (top_p_probs / den).astype(float).ravel()
+        normalized_top_p_probs = np.maximum(normalized_top_p_probs, 0.0)
+        s = normalized_top_p_probs.sum()
+        if (not np.isfinite(s)) or s <= 0:
+            normalized_top_p_probs = np.ones_like(normalized_top_p_probs) / len(normalized_top_p_probs)
         else:
-            normalized_top_p_probs = (top_p_probs / den).astype(float).ravel()
-            # clamp tiny negatives & renormalize to avoid “probabilities do not sum to 1”
-            normalized_top_p_probs = np.maximum(normalized_top_p_probs, 0.0)
-            s = normalized_top_p_probs.sum()
-            if (not np.isfinite(s)) or s <= 0:
-                normalized_top_p_probs = np.ones_like(normalized_top_p_probs) / len(normalized_top_p_probs)
-            else:
-                normalized_top_p_probs /= s
+            normalized_top_p_probs /= s
 
+        # random choice
         choice_pos = np.random.choice(len(keep_indices), p=normalized_top_p_probs)
         selected_move_index = int(keep_indices[choice_pos])
         selected_move = legal_moves[selected_move_index]
