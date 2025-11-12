@@ -6,6 +6,32 @@ import torch
 from model import TransformerClassifier
 from pprint import pprint
 
+import torch.nn as nn
+import torch.nn.functional as F
+
+class DummyModel(nn.Module):
+    """
+    Dummy model to test Rishi.get_best_move() without a trained checkpoint.
+    Returns random logits (before sigmoid) to simulate P(side-to-move wins).
+    """
+    def __init__(self, mode="logit"):
+        super().__init__()
+        self.mode = mode
+
+    def forward(self, x):
+        # x is a tensor of shape [N, seq_len]
+        N = x.shape[0]
+
+        if self.mode == "logit":
+            # Return a random logit per position
+            return torch.randn(N, 1, device=x.device)
+        elif self.mode == "wdl":
+            # Optional alternate mode: return fake WDL probabilities
+            z = torch.randn(N, 3, device=x.device)
+            return F.softmax(z, dim=-1)
+        else:
+            raise ValueError("Unknown mode. Use 'logit' or 'wdl'.")
+
 class Rishi:
     def __init__(self, path_to_model, temperature=0.005, top_p=0.9):
         self.pikafish = PikafishEngine(config.PIKAFISH_THREADS)
@@ -53,44 +79,48 @@ class Rishi:
         future_fens_tokenized = future_fens_tokenized.to(self.device)
 
         # pass through model and get expected score from WDL probs
-        wdl_probs = self.model(future_fens_tokenized)
-        expected_scores = torch.sum(wdl_probs * torch.tensor([1.0, 0.0, 0.0], device=self.device), dim=1)
-        expected_scores = expected_scores.squeeze()
-        expected_scores = expected_scores.detach().cpu().numpy()
+        logits = self.model(future_fens_tokenized)
+        side_win_probs = torch.sigmoid(logits)
+        w_probs = (1.0 - side_win_probs).detach().cpu().numpy()
 
         # pprint(dict(zip(legal_moves, expected_scores.tolist())))
         
-        # flip expected score to be our winning chances in states s'
-        expected_scores = 1 - expected_scores
-
         # to keep attacking strategy consistent, use Pikafish if all of the top 5 moves have >= 99% chance of winning
-        if(np.all(np.sort(expected_scores)[::-1][:5] >= 0.99)):
+        if (w_probs.size >= 5) and np.all(np.sort(w_probs)[::-1][:5] >= 0.99):
             self.pikafish.set_position(fen)
             return self.pikafish.get_best_move(config.PIKAFISH_MOVETIME_MS)
 
         # convert to sharpened probability distribution with softmax w. temperature
-        cooled_scores = expected_scores / self.temperature
+        cooled_scores = w_probs / self.temperature
         e_x = np.exp(cooled_scores - np.max(cooled_scores))
         move_probabilities = e_x / e_x.sum()
 
-        # top p sampling
-        sorted_probs_indices = np.argsort(move_probabilities)[::-1]
-        sorted_probs = move_probabilities[sorted_probs_indices]
-        cumulative_probs = np.cumsum(sorted_probs)
-        cutoff_index = np.where(cumulative_probs >= self.top_p)[0][0] + 1
-        keep_indices = sorted_probs_indices[:cutoff_index]
+        # --- top p sampling (keep it strictly 1-D and safe) ---
+        order = np.argsort(move_probabilities)[::-1]
+        probs_sorted = move_probabilities[order]
+        cumsum = np.cumsum(probs_sorted)
+        cutoff = int(np.searchsorted(cumsum, self.top_p) + 1)
+        cutoff = max(cutoff, 1)  # ensure at least one kept
 
-        top_p_moves = [legal_moves[idx] for idx in keep_indices]
-        top_p_probs = move_probabilities[keep_indices]
-        normalized_top_p_probs = top_p_probs / np.sum(top_p_probs)
+        keep_indices = order[:cutoff]                     # shape (K,)
+        top_p_probs = probs_sorted[:cutoff]               # shape (K,)
+        den = top_p_probs.sum()
 
-        # print("Choosing from the following moves with corresponding probabilities:")
-        # pprint(dict(zip(top_p_moves, normalized_top_p_probs.tolist())))
-        selected_move_index = np.random.choice(
-            a=keep_indices,
-            p=normalized_top_p_probs
-        )
+        # Fallbacks for degenerate cases
+        if cutoff == 1 or not np.isfinite(den) or den <= 0:
+            selected_move_index = int(keep_indices[0])
+        else:
+            normalized_top_p_probs = (top_p_probs / den).astype(float).ravel()
+            # clamp tiny negatives & renormalize to avoid “probabilities do not sum to 1”
+            normalized_top_p_probs = np.maximum(normalized_top_p_probs, 0.0)
+            s = normalized_top_p_probs.sum()
+            if (not np.isfinite(s)) or s <= 0:
+                normalized_top_p_probs = np.ones_like(normalized_top_p_probs) / len(normalized_top_p_probs)
+            else:
+                normalized_top_p_probs /= s
 
+        choice_pos = np.random.choice(len(keep_indices), p=normalized_top_p_probs)
+        selected_move_index = int(keep_indices[choice_pos])
         selected_move = legal_moves[selected_move_index]
         return selected_move
 
