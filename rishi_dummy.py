@@ -1,3 +1,5 @@
+import numpy as np
+
 class Rishi:
     def __init__(self, path_to_model):
         pass

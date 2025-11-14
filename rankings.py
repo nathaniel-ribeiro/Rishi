@@ -24,44 +24,35 @@ class MoveComparison:
   def get_taus(self):
     return self.taus
 
-  # takes 2d numpy array of move rankings from both engines and calculates
-  # average spearman correlation
-  # def spearman(self, pi_ranks, ri_ranks):
-  #   n, m = pi_ranks.shape
-
-  #   # encode strings as integers
-  #   unique_moves = np.unique(np.concatenate([pi_ranks.flatten(), ri_ranks.flatten()]))
-  #   move_to_int = {move: idx for idx, move in enumerate(unique_moves)}
-  #   pi_encoded = np.vectorize(move_to_int.get)(pi_ranks)
-  #   ri_encoded = np.vectorize(move_to_int.get)(ri_ranks)
-
-  #   # map moves to rank
-  #   ri_rank_map = np.zeros((m, len(unique_moves)), dtype=int)
-  #   ri_rank_map[np.arange(n)[:, None], ri_encoded] = np.arange(m)
-
-  #   pi_to_ri_ranks = ri_rank_map[np.arange(n)[:, None], pi_encoded]
-
-  #   # spearman formula
-  #   d = np.arange(m) - pi_to_ri_ranks
-  #   d2_sum = np.sum(d**2, axis=1)
-  #   rho_per_position = 1 - (6 * d2_sum) / (m * (m**2 - 1))
-    
-  #   return np.mean(rho_per_position)
+  def normalize_score(self, centipawn):
+      if isinstance(centipawn, str) and centipawn.startswith("M"):
+          n = int(centipawn[1:])
+          return 10_000 - n
+      if isinstance(centipawn, str) and centipawn.startswith("-M"):
+          n = int(centipawn[2:])
+          return -10_000 + n
+      return centipawn
 
   # rank moves for each fen in dataset and compare results to update stats
   def compare_models(self):
-    oracle.new_game()
-    for fen in fens:
-      oracle.set_position(fen)
-      legal_moves = {move: oracle.get_fen_after_fen_and_moves(fen, [move]) for move in self.oracle.get_legal_moves()}
+    self.oracle.new_game()
+    for fen in self.data:
+      self.oracle.set_position(fen)
 
-      oracle_ranking = [move for eval, move in [(self.oracle.evaluate(legal_moves[move]), move) for move in legal_moves].sort()]
-      rishi_ranking = [move for eval, move in [(self.rishi.evaluate(legal_moves[move]), move) for move in legal_moves].sort()]
+      oracle_ranking = []
+      rishi_ranking = []
+      for move in self.oracle.get_legal_moves():
+        new_fen = self.oracle.get_fen_after_fen_and_moves(fen, [move])
+        oracle_ranking.append((self.normalize_score(self.oracle.evaluate(new_fen)), move))
+        rishi_ranking.append((self.normalize_score(self.rishi.evaluate(new_fen)), move))
+      
+      oracle_ranking = [move for _, move in sorted(oracle_ranking, reverse=True)]
+      rishi_ranking = [move for _, move in sorted(rishi_ranking, reverse=True)]
 
       # update stats
-      self.move_accuracy_vars[0] += oracle_ranking[0][0] == rishi_ranking[0][0]
-      self.move_accuracy_vars[0] += 1
-      self.taus.append(kendalltau(oracle_ranking, rishi_ranking))
+      self.move_accuracy_vars[0] += (oracle_ranking[0] == rishi_ranking[0])
+      self.move_accuracy_vars[1] += 1
+      self.taus.append(kendalltau(oracle_ranking, rishi_ranking).statistic)
 
     return self.get_move_accuracy(), self.get_taus()
 
@@ -73,17 +64,8 @@ def load_fens(file_path):
       fens.append(row['FEN'])
   return fens
 
-def normalize_score(centipawn):
-    if isinstance(centipawn, str) and centipawn.startswith("M"):
-        n = int(centipawn[1:])
-        return 10_000 - n
-    if isinstance(centipawn, str) and centipawn.startswith("-M"):
-        n = int(centipawn[2:])
-        return -10_000 + n
-    return centipawn
-
 def main():
-  DATA_PATH = './temp.csv'
+  DATA_PATH = './data/temp.csv'
   data = load_fens(DATA_PATH)
   
   oracle = PikafishEngine(config.PIKAFISH_THREADS)
