@@ -128,7 +128,7 @@ class PikafishEngine:
                 return line.split()[1]
         return None
 
-    def evaluate(self, fen, think_time=10):
+    def evaluate_pos(self, fen, think_time=10):
         '''
         @param fen: FEN representation of current position
         @param think_time: how long should Pikafish think before giving an evaluation?

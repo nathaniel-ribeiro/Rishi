@@ -37,13 +37,11 @@ class MoveComparison:
   def compare_models(self):
     self.oracle.new_game()
     for fen in self.data:
-      self.oracle.set_position(fen)
-
       oracle_ranking = []
       rishi_ranking = []
-      for move in self.oracle.get_legal_moves():
+      for move in self.oracle.get_legal_moves(fen):
         new_fen = self.oracle.get_fen_after_fen_and_moves(fen, [move])
-        oracle_ranking.append((self.normalize_score(self.oracle.evaluate(new_fen)), move))
+        oracle_ranking.append((self.normalize_score(self.oracle.evaluate_pos(new_fen)), move))
         rishi_ranking.append((self.normalize_score(self.rishi.evaluate(new_fen)), move))
       
       oracle_ranking = [move for _, move in sorted(oracle_ranking, reverse=True)]
