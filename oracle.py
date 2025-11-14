@@ -128,6 +128,46 @@ class PikafishEngine:
                 return line.split()[1]
         return None
 
+    def evaluate(self, fen, think_time=10):
+        '''
+        @param fen: FEN representation of current position
+        @param think_time: how long should Pikafish think before giving an evaluation?
+        returns: tuple containing centipawn evaluation (unnormalized) and wdl probabilities (normalized)
+
+        Evaluates the board resulting from the given move_history using Pikafish. 
+        Evaluations are from *current* player's perspective.
+        '''
+        self.set_position(fen)
+        self.send(f"go movetime {think_time}")
+        lines = self._wait_for("bestmove")
+        centipawns, win_prob, draw_prob, lose_prob = None, None, None, None
+        for line in lines:
+            if "wdl" in line:
+                match = re.search(r"wdl (\d+) (\d+) (\d+)", line)
+                if match:
+                    win_prob = int(match.group(1)) / 1000
+                    draw_prob = int(match.group(2)) / 1000
+                    lose_prob = int(match.group(3)) / 1000
+            if "score cp" in line:
+                match = re.search(r"score cp (-?\d+)", line)
+                if match:
+                    centipawns = int(match.group(1))
+            elif "score mate" in line:
+                match = re.search(r"score mate (-?\d+)", line)
+                if match:
+                    mate_in_n = int(match.group(1))
+                    centipawns = f"M{mate_in_n}" if mate_in_n > 0 else f"-M{abs(mate_in_n)}"
+                # handle cases where we/they are already checkmated
+                if centipawns == "M0":
+                    win_prob = 1.0
+                    draw_prob = 0.0
+                    lose_prob = 0.0
+                elif centipawns == "-M0":
+                    win_prob = 0.0
+                    draw_prob = 0.0
+                    lose_prob = 1.0
+        return centipawns, win_prob, draw_prob, lose_prob
+
     def evaluate(self, move_history, think_time):
         '''
         @param move_history: list of moves in long algebraic notation to setup position
