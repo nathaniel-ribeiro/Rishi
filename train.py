@@ -8,15 +8,16 @@ import time
 import argparse
 import copy
 import torch.nn.functional as F
+import wandb
 
 def get_args():
     parser = argparse.ArgumentParser(description="Training configuration options")
 
-    parser.add_argument("--max_epochs", type=int, default=100,
+    parser.add_argument("--max_epochs", type=int, default=50,
                         help="Maximum number of epochs to train for")
     parser.add_argument("--batch_size", type=int, default=4096,
                         help="Batch size per iteration")
-    parser.add_argument("--patience", type=int, default=10,
+    parser.add_argument("--patience", type=int, default=5,
                         help="Early stopping patience")
     parser.add_argument("--learning_rate", type=float, default=1e-4,
                         help="Initial learning rate for Adam optimizer")
@@ -24,7 +25,7 @@ def get_args():
                         help="Probability of horizontally flipping the board for data augmentation")
     parser.add_argument("--d_model", type=int, default=256,
                         help="Transformer embedding dimension")
-    parser.add_argument("--n_heads", type=int, default=8,
+    parser.add_argument("--n_heads", type=int, default=4,
                         help="Number of attention heads per transformer layer")
     parser.add_argument("--n_layers", type=int, default=8,
                         help="Number of transformer encoder layers")
@@ -36,6 +37,8 @@ def get_args():
                         help="Dropout rate")
     parser.add_argument("--save_model", action="store_true",
                         help="If specified, save the trained model at the end of training")
+    parser.add_argument("--wandb", action="store_true",
+                        help="If specified, log metrics using Weights and Biases (WandB)")
 
     return parser.parse_args()
 
@@ -53,7 +56,18 @@ if __name__ == "__main__":
     WEIGHT_DECAY = args.weight_decay
     DROPOUT = args.dropout
     SAVE_MODEL = args.save_model
+    WANDB = args.wandb
 
+    run = None
+    if WANDB: run = wandb.init(project="rishi", 
+                               config={
+                                   "learning_rate": LEARNING_RATE,
+                                   "d_model": D_MODEL,
+                                   "n_heads": N_HEADS,
+                                   "n_layers": N_LAYERS,
+                                   "weight_decay": WEIGHT_DECAY,
+                                   "dropout": DROPOUT
+                               })
     device = "cuda" if torch.cuda.is_available() else "cpu"
     tokenizer = BoardTokenizer(MAX_SEQ_LEN)
 
@@ -67,18 +81,18 @@ if __name__ == "__main__":
 
     VOCAB_SIZE = tokenizer.vocab_size
     model = TransformerClassifier(VOCAB_SIZE, MAX_SEQ_LEN, D_MODEL, N_LAYERS, N_HEADS, DROPOUT).to(device)
+    if WANDB: wandb.watch(model)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-    train_criterion = torch.nn.BCEWithLogitsLoss()
-    val_criterion = torch.nn.MSELoss()
+    bce = torch.nn.BCEWithLogitsLoss()
+    mse = torch.nn.MSELoss()
 
     parameter_count = sum(p.numel() for p in model.parameters())
     print(f"Model has {parameter_count/1e6:.1f} M params")
     old_val_loss = np.inf
     patience = PATIENCE
     scaler = torch.amp.GradScaler(device)
-    best_val_loss = np.inf
+    best_val_rmse = np.inf
     best_model = None
-    current_step = 0
 
     for epoch in range(MAX_EPOCHS):
         model.train()
@@ -96,12 +110,10 @@ if __name__ == "__main__":
                 # required to prevent PyTorch from shitting itself when encountering a double under AMP
                 labels = labels.float()
                 # BCEWithLogits needs logits
-                loss = train_criterion(logits, labels)
+                loss = bce(logits, labels)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
-            current_step += 1
-
             train_loss += loss.item() * inputs.size(0)
             total += inputs.size(0)
         
@@ -109,6 +121,7 @@ if __name__ == "__main__":
         
         # validate
         val_loss = 0.0
+        val_rmse = 0.0
         total = 0
         model.eval()
         with torch.no_grad():
@@ -120,21 +133,22 @@ if __name__ == "__main__":
                     # required to prevent PyTorch from shitting itself when encountering a double under AMP
                     labels = labels.float()
                     # RMSE
-                    loss = torch.sqrt(val_criterion(outputs, labels))
+                    loss = bce(logits, labels)
+                    rmse = torch.sqrt(mse(outputs, labels))
                     val_loss += loss.item() * inputs.size(0)
+                    val_rmse += rmse.item() * inputs.size(0)
                     total += inputs.size(0)
 
         avg_val_loss = val_loss / total
-        if device == "cuda": torch.cuda.synchronize()
-        tock = time.time()
-        elapsed_mins = (tock - tick) / 60
-
-        print(f"Epoch {epoch}: \t Train Loss (BCE): {avg_train_loss:.3f} \t Val Loss (RMSE): {avg_val_loss:.3f} \t in {elapsed_mins:.1f} mins")
+        avg_val_rmse = val_rmse / total
+        if WANDB: run.log({"train_bce": avg_train_loss, 'val_bce': avg_val_loss, 'val_rmse': avg_val_rmse})
         
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
+        # track best RMSE to save best version of model
+        if avg_val_rmse < best_val_rmse:
+            best_val_rmse = avg_val_rmse
             best_model = copy.deepcopy(model)
         
+        # patience uses BCE to determine early stopping
         if avg_val_loss < old_val_loss:
             patience = PATIENCE
         else:
@@ -144,3 +158,4 @@ if __name__ == "__main__":
         old_val_loss = avg_val_loss
 
     if SAVE_MODEL: torch.save(best_model, f"{config.MODELS_DIR}/rishi.pt")
+    if WANDB: run.finish()
