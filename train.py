@@ -91,7 +91,7 @@ if __name__ == "__main__":
     old_val_loss = np.inf
     patience = PATIENCE
     scaler = torch.amp.GradScaler(device)
-    best_val_rmse = np.inf
+    best_val_loss = np.inf
     best_model = None
 
     for epoch in range(MAX_EPOCHS):
@@ -143,9 +143,9 @@ if __name__ == "__main__":
         avg_val_rmse = val_rmse / total
         if WANDB: run.log({"train_bce": avg_train_loss, 'val_bce': avg_val_loss, 'val_rmse': avg_val_rmse})
         
-        # track best RMSE to save best version of model
-        if avg_val_rmse < best_val_rmse:
-            best_val_rmse = avg_val_rmse
+        # track best BCE to save best version of model
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
             best_model = copy.deepcopy(model)
         
         # patience uses BCE to determine early stopping
