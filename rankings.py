@@ -3,7 +3,7 @@ import csv
 from scipy.stats import kendalltau
 
 import config
-from rishi_dummy import Rishi
+from rishi import Rishi
 from oracle import PikafishEngine
 
 class MoveComparison:

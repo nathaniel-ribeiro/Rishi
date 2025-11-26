@@ -88,15 +88,14 @@ class Rishi:
         selected_move = legal_moves[selected_move_index]
         return selected_move
 
-    def evaluate(self, move_history):
-        fen = self.pikafish.get_fen_after_moves(move_history)
+    def evaluate(self, fen):
         fen_tokenized = self.tokenizer.encode(fen)
-        inputs = np.array(fen_tokenized).unsqueeze(0)
-
-        win, _, lose = self.model(inputs).squeeze(0).tolist()
-        # assumes 1 point for winning, 0 points for draw, -1 point for losing (different from get best move!)
-        expected_score = win - lose
-        # TODO: convert from expected score to CP
-        return 0
+        fen_tokenized = torch.from_numpy(fen_tokenized).unsqueeze(0)
+        fen_tokenized = fen_tokenized.to(self.device)
+        
+        with torch.no_grad():
+            logit = self.model(fen_tokenized).squeeze(-1).item()
+        
+        return logit
 
         
