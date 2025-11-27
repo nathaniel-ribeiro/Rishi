@@ -13,16 +13,22 @@ class MoveComparison:
     self.data = data
 
     # stats tracked
-    self.move_accuracy_vars = [0, 0] # sum, number of elems
-    self.taus = [] # list of kendall's taus
-
+    self.trials = 0
+    self.move_accuracy_sum = 0
+    self.tau_sum = 0
+    self.top_3_sum = 0
+    
   def get_move_accuracy(self):
-    total, n = self.move_accuracy_vars
-    if not n: return 0
-    return total / n
+    if not self.trials: return 0
+    return self.move_accuracy_sum / self.trials
 
-  def get_taus(self):
-    return self.taus
+  def get_tau(self):
+    if not self.trials: return 0
+    return self.tau_sum / self.trials
+
+  def get_top_3(self):
+    if not self.trials: return 0
+    return self.top_3_sum / self.trials
 
   def normalize_score(self, centipawn):
       if isinstance(centipawn, str) and centipawn.startswith("M"):
@@ -41,18 +47,25 @@ class MoveComparison:
       rishi_ranking = []
       for move in self.oracle.get_legal_moves(fen):
         new_fen = self.oracle.get_fen_after_fen_and_moves(fen, [move])
-        oracle_ranking.append((self.normalize_score(self.oracle.evaluate_pos(new_fen)), move))
-        rishi_ranking.append((self.normalize_score(self.rishi.evaluate(new_fen)), move))
+        # negate scores because new_fen is opponent's turn
+        oracle_score = -self.normalize_score(self.oracle.evaluate_pos(new_fen)[0])
+        rishi_score = -self.rishi.evaluate(new_fen)
+        oracle_ranking.append((oracle_score, move))
+        rishi_ranking.append((rishi_score, move))
       
       oracle_ranking = [move for _, move in sorted(oracle_ranking, reverse=True)]
       rishi_ranking = [move for _, move in sorted(rishi_ranking, reverse=True)]
 
       # update stats
-      self.move_accuracy_vars[0] += (oracle_ranking[0] == rishi_ranking[0])
-      self.move_accuracy_vars[1] += 1
-      self.taus.append(kendalltau(oracle_ranking, rishi_ranking).statistic)
+      self.trials += 1
+      self.move_accuracy_sum += (oracle_ranking[0] == rishi_ranking[0])
+      self.tau_sum += kendalltau(oracle_ranking, rishi_ranking).statistic
 
-    return self.get_move_accuracy(), self.get_taus()
+      top_n = min(3, len(oracle_ranking))
+      for i in range(top_n):
+        self.top_3_sum += (oracle_ranking[i] == rishi_ranking[0])
+
+    return self.get_move_accuracy(), self.get_tau(), self.get_top_3()
 
 def load_fens(file_path):
   fens = []
@@ -63,16 +76,23 @@ def load_fens(file_path):
   return fens
 
 def main():
+  RISHI_PATH = './models/rishi_25.pt'
   DATA_PATH = './data/temp.csv'
+  print('Loading data')
   data = load_fens(DATA_PATH)
   
+  print('Instantiating engines')
   oracle = PikafishEngine(config.PIKAFISH_THREADS)
-  rishi = Rishi(None)
-  comparison = MoveComparison(oracle, rishi, data)
-  accuracy, taus = comparison.compare_models()
-  print(f'accuracy: {accuracy}')
-  print(f"kendall's taus (first ten): {taus[:10]}")
+  rishi = Rishi(RISHI_PATH)
 
+  print('Comparing evaluations...')
+  comparison = MoveComparison(oracle, rishi, data)
+  accuracy, taus, top_3 = comparison.compare_models()
+
+  print(f'\nProcessed {len(data)} positions')
+  print(f'Move accuracy: {accuracy:.2%}')
+  print(f"Average Kendall's tau: {taus: .4f}")
+  print(f"Top 3 move accuracy: {top_3: .2%}")
 
 if __name__ == '__main__':
   main()

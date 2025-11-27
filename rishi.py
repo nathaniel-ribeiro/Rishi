@@ -11,9 +11,9 @@ class Rishi:
         self.pikafish = PikafishEngine(config.PIKAFISH_THREADS)
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        self.tokenizer = BoardTokenizer(97)
+        self.tokenizer = BoardTokenizer(98)
         #TODO: fix this later by serializing the whole model in the training script
-        self.model = torch.load(path_to_model, map_location=self.device)
+        self.model = torch.load(path_to_model, map_location=self.device, weights_only=False)
         self.model.to(self.device)
         self.model.eval()
         self.temperature = temperature
