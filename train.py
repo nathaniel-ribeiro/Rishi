@@ -27,7 +27,7 @@ def get_args():
                         help="Transformer embedding dimension")
     parser.add_argument("--n_heads", type=int, default=4,
                         help="Number of attention heads per transformer layer")
-    parser.add_argument("--n_layers", type=int, default=8,
+    parser.add_argument("--n_layers", type=int, default=4,
                         help="Number of transformer encoder layers")
     parser.add_argument("--max_seq_len", type=int, default=98,
                         help="Maximum input sequence length")
@@ -35,6 +35,7 @@ def get_args():
                         help="Weight decay factor in [0.0, 1.0]")
     parser.add_argument("--dropout", type=float, default=0.1,
                         help="Dropout rate")
+    parser.add_argument("--max_grad_norm", type=float, default=10.0, help="Maximum norm for gradient clipping")
     parser.add_argument("--save_model", action="store_true",
                         help="If specified, save the trained model at the end of training")
     parser.add_argument("--wandb", action="store_true",
@@ -55,6 +56,7 @@ if __name__ == "__main__":
     MAX_SEQ_LEN = args.max_seq_len
     WEIGHT_DECAY = args.weight_decay
     DROPOUT = args.dropout
+    MAX_GRAD_NORM = args.max_grad_norm
     SAVE_MODEL = args.save_model
     WANDB = args.wandb
 
@@ -100,7 +102,6 @@ if __name__ == "__main__":
         total = 0
 
         # train
-        tick = time.time()
         for inputs, labels in train_loader:
             inputs, labels = inputs.to(device), labels.to(device)
 
@@ -112,6 +113,8 @@ if __name__ == "__main__":
                 # BCEWithLogits needs logits
                 loss = bce(logits, labels)
             scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), MAX_GRAD_NORM)
             scaler.step(optimizer)
             scaler.update()
             train_loss += loss.item() * inputs.size(0)

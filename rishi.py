@@ -11,8 +11,7 @@ class Rishi:
         self.pikafish = PikafishEngine(config.PIKAFISH_THREADS)
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        self.tokenizer = BoardTokenizer(97)
-        #TODO: fix this later by serializing the whole model in the training script
+        self.tokenizer = BoardTokenizer(98)
         self.model = torch.load(path_to_model, map_location=self.device)
         self.model.to(self.device)
         self.model.eval()
@@ -47,13 +46,13 @@ class Rishi:
         future_fens_tokenized = future_fens_tokenized.to(self.device)
 
         # pass through model and get expected score from WDL probs
-        wdl_probs = self.model(future_fens_tokenized)
-        expected_scores = torch.sum(wdl_probs * torch.tensor([1.0, 0.0, 0.0], device=self.device), dim=1)
-        expected_scores = expected_scores.squeeze()
-        expected_scores = expected_scores.detach().cpu().numpy()
-
-        # pprint(dict(zip(legal_moves, expected_scores.tolist())))
+        wdl_probs = None
+        with torch.no_grad():
+            logits = self.model(future_fens_tokenized)
+            wdl_probs = torch.sigmoid(logits)
         
+        expected_scores = wdl_probs.squeeze()
+        expected_scores = expected_scores.detach().cpu().numpy()
         # flip expected score to be our winning chances in states s'
         expected_scores = 1 - expected_scores
 
@@ -87,16 +86,5 @@ class Rishi:
 
         selected_move = legal_moves[selected_move_index]
         return selected_move
-
-    def evaluate(self, move_history):
-        fen = self.pikafish.get_fen_after_moves(move_history)
-        fen_tokenized = self.tokenizer.encode(fen)
-        inputs = np.array(fen_tokenized).unsqueeze(0)
-
-        win, _, lose = self.model(inputs).squeeze(0).tolist()
-        # assumes 1 point for winning, 0 points for draw, -1 point for losing (different from get best move!)
-        expected_score = win - lose
-        # TODO: convert from expected score to CP
-        return 0
 
         
