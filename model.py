@@ -39,14 +39,12 @@ class TransformerClassifier(nn.Module):
         self.token_embedding = nn.Embedding(self.vocab_size, d_model)
         self.pos_encoding = SinusoidalPositionalEncoding(d_model, max_seq_len)
 
-        # pre-norm for training stability
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
             nhead=n_heads,
             dim_feedforward=4*d_model,
             dropout=dropout,
-            batch_first=True,
-            norm_first=True
+            batch_first=True
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
         self.classifier = nn.Sequential(
