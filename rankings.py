@@ -16,6 +16,7 @@ class MoveComparison:
     self.trials = 0
     self.move_accuracy_sum = 0
     self.tau_sum = 0
+    self.tau_count = 0
     self.top_3_sum = 0
     
   def get_move_accuracy(self):
@@ -23,8 +24,8 @@ class MoveComparison:
     return self.move_accuracy_sum / self.trials
 
   def get_tau(self):
-    if not self.trials: return 0
-    return self.tau_sum / self.trials
+    if not self.tau_count: return 0
+    return self.tau_sum / self.tau_count
 
   def get_top_3(self):
     if not self.trials: return 0
@@ -59,7 +60,10 @@ class MoveComparison:
       # update stats
       self.trials += 1
       self.move_accuracy_sum += (oracle_ranking[0] == rishi_ranking[0])
-      self.tau_sum += kendalltau(oracle_ranking, rishi_ranking).statistic
+      tau = kendalltau(oracle_ranking, rishi_ranking).statistic
+      if not np.isnan(tau):
+        self.tau_sum += tau
+        self.tau_count += 1
 
       top_n = min(3, len(oracle_ranking))
       for i in range(top_n):
@@ -76,7 +80,7 @@ def load_fens(file_path):
   return fens
 
 def main():
-  RISHI_PATH = './models/rishi_25.pt'
+  RISHI_PATH = './models/rishi.pt'
   DATA_PATH = './data/temp.csv'
   print('Loading data')
   data = load_fens(DATA_PATH)
