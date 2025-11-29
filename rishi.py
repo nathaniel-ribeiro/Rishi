@@ -49,8 +49,9 @@ class Rishi:
             win_probs = torch.sigmoid(logits)
         expected_scores = win_probs.squeeze()
         expected_scores = expected_scores.detach().cpu().numpy()
-        pprint(expected_scores)
         # minimize the OPPONENT's win probability
+        opponent_win_p = np.min(expected_scores)
+        print(f"You have a {(opponent_win_p * 100):.2f}% chance to win")
         selected_move_idx = np.argmin(expected_scores)
         selected_move = legal_moves[selected_move_idx]
         return selected_move
