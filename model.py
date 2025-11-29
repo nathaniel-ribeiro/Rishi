@@ -44,7 +44,8 @@ class TransformerClassifier(nn.Module):
             nhead=n_heads,
             dim_feedforward=4*d_model,
             dropout=dropout,
-            batch_first=True
+            batch_first=True,
+            norm_first=True
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
         self.classifier = nn.Sequential(
