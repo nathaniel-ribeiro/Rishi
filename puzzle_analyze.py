@@ -131,7 +131,7 @@ def Solve_Puzzle(engine,fen,solution,category, thinktime, single_test = False):
         if best_move != solution[i]:
             puzzle_solved = False
             break
-        fen = engine.play_moves(fen,tuple(solution[:i+2]))
+        fen = engine.get_fen_after_fen_and_moves(fen,tuple(solution[:i+2]))
      
     return puzzle_solved
 
@@ -139,11 +139,11 @@ def Solve_Puzzle(engine,fen,solution,category, thinktime, single_test = False):
 def Check_Alternate_Answer(engine,fen,category,thinktime):
     for i in range(category):
         best_move = engine.get_best_move(fen)
-        fen = engine.play_moves(fen,[best_move])
+        fen = engine.get_fen_after_fen_and_moves(fen,[best_move])
         #Opponent's optimal move
         if i!=category-1:
             best_move = engine.get_best_move(fen)
-            fen = engine.play_moves(fen,[best_move])
+            fen = engine.get_fen_after_fen_and_moves(fen,[best_move])
     return engine.is_checkmate(fen)
 
 #-m : decide which model to use(Pikafish or Rishi) (required)
