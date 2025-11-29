@@ -42,7 +42,7 @@ class Rishi:
         if path_to_model == "__DUMMY__":
             self.model = DummyModel("logit")
         else:
-            self.model = torch.load(path_to_model, map_location=self.device)
+            self.model = torch.load(path_to_model, map_location=self.device, weights_only=False)
         self.model.to(self.device)
         self.model.eval()
         self.temperature = temperature
@@ -76,58 +76,70 @@ class Rishi:
         self.pikafish.send("quit")
         self.pikafish.engine.wait()
 
-    def get_best_move(self, fen):
-        #TODO: update this to account for change from WDL probs -> win prob
+    def get_best_move(self, fen, mode = "puzzle"):
         legal_moves = self.pikafish.get_legal_moves(fen)
-        future_fens = [self.pikafish.get_fen_after_fen_and_moves(fen, legal_move) for legal_move in legal_moves]
-        future_fens_tokenized = np.array([self.tokenizer.encode(future_fen) for future_fen in future_fens])
-
-        future_fens_tokenized = torch.from_numpy(future_fens_tokenized)
-        future_fens_tokenized = future_fens_tokenized.to(self.device)
-
-        # pass through model and get expected score from WDL probs
-        with torch.no_grad():
-            logits = self.model(future_fens_tokenized).squeeze(-1)
-            side_win_probs = torch.sigmoid(logits)
-            w_probs = (1.0 - side_win_probs).detach().cpu().numpy()
-
-        # pprint(dict(zip(legal_moves, expected_scores.tolist())))
-        
-        # to keep attacking strategy consistent, use Pikafish if all of the top 5 moves have >= 99% chance of winning
-        if (w_probs.size >= 5) and np.all(np.sort(w_probs)[::-1][:5] >= 0.99):
+        if not legal_moves:
             self.pikafish.set_position(fen)
             return self.pikafish.get_best_move(config.PIKAFISH_MOVETIME_MS)
 
-        # convert to sharpened probability distribution with softmax w. temperature
+        future_fens = [
+            self.pikafish.get_fen_after_fen_and_moves(fen, move)
+            for move in legal_moves
+        ]
+
+        future_fens_tokenized = np.array(
+            [self.tokenizer.encode(future_fen) for future_fen in future_fens],
+            dtype=np.int64,
+        )
+        future_fens_tokenized = torch.from_numpy(future_fens_tokenized).to(self.device)
+
+        with torch.no_grad():
+            logits = self.model(future_fens_tokenized).squeeze(-1)
+            side_win_probs = torch.sigmoid(logits)
+            w_probs = (1.0 - side_win_probs).detach().cpu().numpy().ravel()
+
+        # optional Pikafish fallback if everything is trivially winning
+        if (w_probs.size >= 5) and np.all(np.sort(w_probs)[::-1][:5] >= 0.99):
+            sorted_idxs = np.argsort(w_probs)[::-1]
+
+            top5_idxs = sorted_idxs[:5]
+            top5_moves = [legal_moves[i] for i in top5_idxs]
+            successors = self.pikafish.get_all_successors_from_moves(fen, top5_moves, config.PIKAFISH_MOVETIME_MS)
+
+            return successors[0]["move"]
+
+        #Greedy decision for puzzle solving
+        if(mode == "puzzle"):
+            best_idx = int(np.argmax(w_probs))
+            return legal_moves[best_idx]
+        
+        # Temperature softmax
         cooled_scores = w_probs / self.temperature
         e_x = np.exp(cooled_scores - np.max(cooled_scores))
         move_probabilities = e_x / e_x.sum()
 
-        # --- top p sampling  ---
+        # top-p sampling
         order = np.argsort(move_probabilities)[::-1]
         probs_sorted = move_probabilities[order]
-        cumsum = np.cumsum(probs_sorted)
-        cutoff = int(np.searchsorted(cumsum, self.top_p) + 1)
-        cutoff = max(cutoff, 1)  # ensure at least one kept
+        cumulative = np.cumsum(probs_sorted)
+        cutoff = int(np.searchsorted(cumulative, self.top_p) + 1)
+        cutoff = max(cutoff, 1)
 
         keep_indices = order[:cutoff]
-        top_p_probs = probs_sorted[:cutoff]
-        den = top_p_probs.sum()
+        top_probs = probs_sorted[:cutoff]
+        den = top_probs.sum()
 
-        # unified safe normalization
-        normalized_top_p_probs = (top_p_probs / den).astype(float).ravel()
-        normalized_top_p_probs = np.maximum(normalized_top_p_probs, 0.0)
-        s = normalized_top_p_probs.sum()
-        if (not np.isfinite(s)) or s <= 0:
-            normalized_top_p_probs = np.ones_like(normalized_top_p_probs) / len(normalized_top_p_probs)
+        normalized_top_probs = (top_probs / den).astype(float).ravel()
+        normalized_top_probs = np.maximum(normalized_top_probs, 0.0)
+        s = normalized_top_probs.sum()
+        if not np.isfinite(s) or s <= 0:
+            normalized_top_probs = np.ones_like(normalized_top_probs) / len(normalized_top_probs)
         else:
-            normalized_top_p_probs /= s
+            normalized_top_probs /= s
 
-        # random choice
-        choice_pos = np.random.choice(len(keep_indices), p=normalized_top_p_probs)
-        selected_move_index = int(keep_indices[choice_pos])
-        selected_move = legal_moves[selected_move_index]
-        return selected_move
+        choice = np.random.choice(len(keep_indices), p=normalized_top_probs)
+        selected_idx = int(keep_indices[choice])
+        return legal_moves[selected_idx]
 
     def evaluate(self, move_history):
         fen = self.pikafish.get_fen_after_moves(move_history)

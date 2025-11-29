@@ -165,8 +165,8 @@ def main():
         threads = args.test[1] if args.test else 8
         engine = PikafishEngine(threads=threads)
     elif(model=="Rishi"):
-        # engine = Rishi("models/rishi.pt")
-        engine = Rishi("__DUMMY__")
+        engine = Rishi("models/rishi.pt")
+        # engine = Rishi("__DUMMY__")
 
     engine._name = model
 

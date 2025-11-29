@@ -141,15 +141,15 @@ class PikafishEngine:
 
         return legal_moves
 
-    #For now, it requires a fen. For start position, input a fen of the startpos
-    def get_all_legal_move_successors(self, fen, think_time = 50):
+    #Rank successors from the list of moves given.
+    #All input Moves must be legal(there is no sanitization to check if the move is actually legal or not)
+    def get_all_successors_from_moves(self, fen, moves, think_time = 50):
         self.new_game()
         self.set_position(fen)
-        legal_moves = self.get_all_legal_moves()
 
         top_moves = []
         
-        for move in legal_moves:
+        for move in moves:
             self.send(f"position fen {fen}")
             self.send(f"go movetime {think_time} searchmoves {move}")
             lines = self._wait_for("bestmove")
