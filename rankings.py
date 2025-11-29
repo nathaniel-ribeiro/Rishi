@@ -45,6 +45,8 @@ class MoveComparison:
   # rank moves for each fen in dataset and compare results to update stats
   def compare_models(self):
     self.oracle.new_game()
+    print_interval = max(10, len(self.data) // 10)
+
     for fen in self.data:
       oracle_ranking = []
       rishi_ranking = []
@@ -71,13 +73,12 @@ class MoveComparison:
       for i in range(top_n):
         self.top_3_sum += (oracle_ranking[i] == rishi_ranking[0])
 
-      if not self.trials % 100:
-        print(f"Trial {self.trials} / {len(self.data)}  complete")
+      if self.trials % print_interval == 0:
+        print(f"Trial {self.trials} / {len(self.data)} complete")
 
     return self.get_move_accuracy(), self.get_tau(), self.get_top_3()
 
-def load_fens(file_path):
-  NUM_TRIALS = 10_000
+def load_fens(file_path, num_trials):
   fens = []
   with open(file_path, newline='', encoding='utf-8') as csvfile:
     reader = csv.DictReader(csvfile)
@@ -85,8 +86,8 @@ def load_fens(file_path):
       fens.append(row['FEN'])
 
   # sample fens from data
-  if len(fens) > NUM_TRIALS:
-    fens = random.sample(fens, NUM_TRIALS)
+  if len(fens) > num_trials:
+    fens = random.sample(fens, num_trials)
 
   return fens
 
@@ -94,23 +95,29 @@ def main():
   start = time.time()
 
   RISHI_PATH = './models/rishi.pt'
-  DATA_PATH = './data/val.csv'
+  DATA_PATH = './data/test.csv'
+  NUM_TRIALS = 50_000
   print('Loading data')
-  data = load_fens(DATA_PATH)
+  data = load_fens(DATA_PATH, NUM_TRIALS)
   
   print('Instantiating engines')
   oracle = PikafishEngine(config.PIKAFISH_THREADS)
   rishi = Rishi(RISHI_PATH)
 
-  print('Comparing evaluations...')
+  print('Comparing evaluations...\n')
   comparison = MoveComparison(oracle, rishi, data)
   accuracy, taus, top_3 = comparison.compare_models()
 
   end = time.time()
-  print(f'\nProcessed {len(data)} positions in {end - start} seconds')
+  duration = int(end - start)
+  hours = duration // 3600
+  duration %= 3600
+  minutes = duration // 60
+  seconds = duration % 60
+  print(f"\nCompared {len(data)} positions' move rankings in {hours} hours, {minutes} minutes, {seconds} seconds")
   print(f'Move accuracy: {accuracy:.2%}')
   print(f"Average Kendall's tau: {taus: .4f}")
-  print(f"Top 3 move accuracy: {top_3: .2%}")
+  print(f'Top 3 move accuracy: {top_3: .2%}')
 
 if __name__ == '__main__':
   main()
