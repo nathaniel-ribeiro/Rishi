@@ -61,6 +61,10 @@ class MoveComparison:
       oracle_ranking = [move for _, move in sorted(oracle_ranking, reverse=True)]
       rishi_ranking = [move for _, move in sorted(rishi_ranking, reverse=True)]
 
+      # skip boards with no legal moves
+      if not rishi_ranking or not oracle_ranking:
+        continue
+
       # update stats
       self.trials += 1
       self.move_accuracy_sum += (oracle_ranking[0] == rishi_ranking[0])
@@ -73,8 +77,15 @@ class MoveComparison:
       for i in range(top_n):
         self.top_3_sum += (oracle_ranking[i] == rishi_ranking[0])
 
+      # print progress after every 10%
       if self.trials % print_interval == 0:
-        print(f"Trial {self.trials} / {len(self.data)} complete")
+        accuracy = self.get_move_accuracy()
+        taus = self.get_tau()
+        top_3 = self.get_top_3()
+        print(f"TRIAL {self.trials} / {len(self.data)}:")
+        print(f'Move accuracy: {accuracy:.2%}')
+        print(f"Average Kendall's tau: {taus: .4f}")
+        print(f'Top 3 move accuracy: {top_3: .2%}\n')
 
     return self.get_move_accuracy(), self.get_tau(), self.get_top_3()
 
@@ -96,7 +107,7 @@ def main():
 
   RISHI_PATH = './models/rishi.pt'
   DATA_PATH = './data/test.csv'
-  NUM_TRIALS = 50_000
+  NUM_TRIALS = 20
   print('Loading data')
   data = load_fens(DATA_PATH, NUM_TRIALS)
   
@@ -114,10 +125,7 @@ def main():
   duration %= 3600
   minutes = duration // 60
   seconds = duration % 60
-  print(f"\nCompared {len(data)} positions' move rankings in {hours} hours, {minutes} minutes, {seconds} seconds")
-  print(f'Move accuracy: {accuracy:.2%}')
-  print(f"Average Kendall's tau: {taus: .4f}")
-  print(f'Top 3 move accuracy: {top_3: .2%}')
+  print(f"Compared {len(data)} positions' move rankings in {hours} hours, {minutes} minutes, {seconds} seconds")
 
 if __name__ == '__main__':
   main()
