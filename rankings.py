@@ -19,7 +19,7 @@ class MoveComparison:
     self.move_accuracy_sum = 0
     self.tau_sum = 0
     self.tau_count = 0
-    self.top_3_sum = 0
+    # self.top_3_sum = 0
     
   def get_move_accuracy(self):
     if not self.trials: return 0
@@ -29,9 +29,9 @@ class MoveComparison:
     if not self.tau_count: return 0
     return self.tau_sum / self.tau_count
 
-  def get_top_3(self):
-    if not self.trials: return 0
-    return self.top_3_sum / self.trials
+  # def get_top_3(self):
+  #   if not self.trials: return 0
+  #   return self.top_3_sum / self.trials
 
   def normalize_score(self, centipawn):
       if isinstance(centipawn, str) and centipawn.startswith("M"):
@@ -73,21 +73,21 @@ class MoveComparison:
         self.tau_sum += tau
         self.tau_count += 1
 
-      top_n = min(3, len(oracle_ranking))
-      for i in range(top_n):
-        self.top_3_sum += (oracle_ranking[i] == rishi_ranking[0])
+      # top_n = min(3, len(oracle_ranking))
+      # for i in range(top_n):
+      #   self.top_3_sum += (oracle_ranking[i] == rishi_ranking[0])
 
       # print progress after every 10%
       if self.trials % print_interval == 0:
         accuracy = self.get_move_accuracy()
         taus = self.get_tau()
-        top_3 = self.get_top_3()
+        # top_3 = self.get_top_3()
         print(f"TRIAL {self.trials} / {len(self.data)}:")
         print(f'Move accuracy: {accuracy:.2%}')
         print(f"Average Kendall's tau: {taus: .4f}")
-        print(f'Top 3 move accuracy: {top_3: .2%}\n')
+        # print(f'Top 3 move accuracy: {top_3: .2%}\n')
 
-    return self.get_move_accuracy(), self.get_tau(), self.get_top_3()
+    return self.get_move_accuracy(), self.get_tau()
 
 def load_fens(file_path, num_trials):
   fens = []
@@ -107,7 +107,7 @@ def main():
 
   RISHI_PATH = './models/rishi.pt'
   DATA_PATH = './data/test.csv'
-  NUM_TRIALS = 20
+  NUM_TRIALS = 50_000
   print('Loading data')
   data = load_fens(DATA_PATH, NUM_TRIALS)
   
@@ -117,7 +117,7 @@ def main():
 
   print('Comparing evaluations...\n')
   comparison = MoveComparison(oracle, rishi, data)
-  accuracy, taus, top_3 = comparison.compare_models()
+  accuracy, taus = comparison.compare_models()
 
   end = time.time()
   duration = int(end - start)
