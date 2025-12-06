@@ -19,7 +19,10 @@ class MoveComparison:
     self.move_accuracy_sum = 0
     self.tau_sum = 0
     self.tau_count = 0
-    # self.top_3_sum = 0
+    
+    # store individual results
+    self.move_accuracies = []
+    self.taus = []
     
   def get_move_accuracy(self):
     if not self.trials: return 0
@@ -28,10 +31,6 @@ class MoveComparison:
   def get_tau(self):
     if not self.tau_count: return 0
     return self.tau_sum / self.tau_count
-
-  # def get_top_3(self):
-  #   if not self.trials: return 0
-  #   return self.top_3_sum / self.trials
 
   def normalize_score(self, centipawn):
       if isinstance(centipawn, str) and centipawn.startswith("M"):
@@ -67,27 +66,71 @@ class MoveComparison:
 
       # update stats
       self.trials += 1
-      self.move_accuracy_sum += (oracle_ranking[0] == rishi_ranking[0])
-      tau = kendalltau(oracle_ranking, rishi_ranking).statistic
+      is_correct = (oracle_ranking[0] == rishi_ranking[0])
+      self.move_accuracy_sum += is_correct
+      self.move_accuracies.append(is_correct)
+      
+      tau_result = kendalltau(oracle_ranking, rishi_ranking)
+      tau = tau_result.statistic
+      
       if not np.isnan(tau):
         self.tau_sum += tau
         self.tau_count += 1
-
-      # top_n = min(3, len(oracle_ranking))
-      # for i in range(top_n):
-      #   self.top_3_sum += (oracle_ranking[i] == rishi_ranking[0])
+        self.taus.append(tau)
 
       # print progress after every 10%
       if self.trials % print_interval == 0:
         accuracy = self.get_move_accuracy()
         taus = self.get_tau()
-        # top_3 = self.get_top_3()
         print(f"TRIAL {self.trials} / {len(self.data)}:")
         print(f'Move accuracy: {accuracy:.2%}')
         print(f"Average Kendall's tau: {taus: .4f}")
-        # print(f'Top 3 move accuracy: {top_3: .2%}\n')
 
     return self.get_move_accuracy(), self.get_tau()
+  
+  def get_aggregate_statistics(self, confidence=0.95):
+    """Calculate aggregate statistics across all FENs"""
+    alpha = 1 - confidence
+    
+    # calculate statistics for move accuracy
+    accuracy_mean = np.mean(self.move_accuracies) if self.move_accuracies else 0
+    accuracy_std = np.std(self.move_accuracies, ddof=1) if len(self.move_accuracies) > 1 else 0
+    accuracy_se = accuracy_std / np.sqrt(len(self.move_accuracies)) if self.move_accuracies else 0
+    
+    # calculate statistics for tau
+    tau_mean = np.mean(self.taus) if self.taus else 0
+    tau_std = np.std(self.taus, ddof=1) if len(self.taus) > 1 else 0
+    tau_se = tau_std / np.sqrt(len(self.taus)) if self.taus else 0
+    
+    # calculate confidence intervals using normal approximation
+    from scipy.stats import norm
+    z_score = norm.ppf(1 - alpha/2)
+    
+    accuracy_ci = (
+      accuracy_mean - z_score * accuracy_se,
+      accuracy_mean + z_score * accuracy_se
+    ) if self.move_accuracies else (0, 0)
+    
+    tau_ci = (
+      tau_mean - z_score * tau_se,
+      tau_mean + z_score * tau_se
+    ) if self.taus else (0, 0)
+    
+    # overall p-value: test if mean tau is significantly different from 0
+    if len(self.taus) > 1:
+      t_stat = tau_mean / tau_se if tau_se > 0 else 0
+      from scipy.stats import t
+      p_value = 2 * (1 - t.cdf(abs(t_stat), len(self.taus) - 1))
+    else:
+      p_value = 1.0
+    
+    return {
+      'accuracy_ci': accuracy_ci,
+      'tau_ci': tau_ci,
+      'p_value': p_value,
+      'tau_std': tau_std,
+      'accuracy_std': accuracy_std
+    }
 
 def load_fens(file_path, num_trials):
   fens = []
@@ -107,7 +150,7 @@ def main():
 
   RISHI_PATH = './models/rishi.pt'
   DATA_PATH = './data/test.csv'
-  NUM_TRIALS = 50_000
+  NUM_TRIALS = 1
   print('Loading data')
   data = load_fens(DATA_PATH, NUM_TRIALS)
   
@@ -118,6 +161,9 @@ def main():
   print('Comparing evaluations...\n')
   comparison = MoveComparison(oracle, rishi, data)
   accuracy, taus = comparison.compare_models()
+  
+  # calculate aggregate statistics
+  stats = comparison.get_aggregate_statistics()
 
   end = time.time()
   duration = int(end - start)
@@ -125,6 +171,16 @@ def main():
   duration %= 3600
   minutes = duration // 60
   seconds = duration % 60
+  
+  print(f"\n{'='*60}")
+  print(f"Final Results ({len(data)} positions):")
+  print(f"{'='*60}")
+  print(f"Move accuracy: {accuracy:.2%}")
+  print(f"  95% CI: [{stats['accuracy_ci'][0]:.2%}, {stats['accuracy_ci'][1]:.2%}]")
+  print(f"Average Kendall's tau: {taus:.4f}")
+  print(f"  95% CI: [{stats['tau_ci'][0]:.4f}, {stats['tau_ci'][1]:.4f}]")
+  print(f"  p-value: {stats['p_value']:.4f}")
+  print(f"{'='*60}")
   print(f"Compared {len(data)} positions' move rankings in {hours} hours, {minutes} minutes, {seconds} seconds")
 
 if __name__ == '__main__':
