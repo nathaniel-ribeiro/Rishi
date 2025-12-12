@@ -150,7 +150,7 @@ def main():
 
   RISHI_PATH = './models/rishi.pt'
   DATA_PATH = './data/test.csv'
-  NUM_TRIALS = 1
+  NUM_TRIALS = 150_000
   print('Loading data')
   data = load_fens(DATA_PATH, NUM_TRIALS)
   
