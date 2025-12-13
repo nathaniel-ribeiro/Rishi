@@ -67,6 +67,35 @@ class PikafishEngine:
         moves = " ".join(move_history)
         self.send(f"position startpos moves {moves}")
 
+    #Send ucinewgame
+    def new_game(self):
+        self.send("ucinewgame"); 
+        self.send("isready"); 
+        self._wait_for("readyok")
+
+    #Play moves from a given FEN and return the new FEN
+    def play_moves(self, fen, moves):
+        moves_str = " ".join(moves)
+        self.send(f"position fen {fen} moves {moves_str}")
+        self.send("d")
+        lines = self._wait_for("Fen:")
+        fen = None
+        for line in lines:
+            match = re.search(r"Fen: (.+)", line)
+            if match:
+                fen = match.group(1)
+                break
+        return fen
+
+    def is_checkmate(self, think_time):
+        self.send(f"go movetime {think_time}")
+        lines = self._wait_for("bestmove")
+        for line in lines:
+            line = line.strip()
+            if "score mate 0" in line:
+                return True
+        return False
+
     def get_fen_after_moves(self, moves):
         self.setup_game(moves)
         self.send("d")
